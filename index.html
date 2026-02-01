@@ -32,24 +32,28 @@
 
     <button class="refresh-btn" onclick="location.reload()">Refresh All Data</button>
 
+
+
     <script>
         function updateImages() {
             const now = new Date();
-            
+        
             // 1. DATE SETUP (For Windgram)
             const yyyy = now.getFullYear();
             const mm = String(now.getMonth() + 1).padStart(2, '0');
             const dd = String(now.getDate()).padStart(2, '0');
             const dateStr = `${yyyy}-${mm}-${dd}`;
 
-            // 2. WINDGRAM (Proxying through weserv for HTTPS)
+            // 2. WINDGRAM (Using the secure proxy)
             const windgramUrl = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
-            document.getElementById('windgram-container').innerHTML = `<img src="${windgramUrl}" alt="Peterson Butte Windgram">`;
+            document.getElementById('windgram-container').innerHTML = `<img src="${windgramUrl}" alt="Windgram Forecast">`;
 
-            // 3. FAA WEBCAM (Direct link to the latest frame)
-            // Note: FAA IDs for Peterson Butte West are typically Site 762, Camera 12793
-            const webcamUrl = `https://weathercams.faa.gov/api/v1/camera/12793/image?t=${now.getTime()}`;
-            document.getElementById('webcam-container').innerHTML = `<img src="${webcamUrl}" alt="FAA Webcam Peterson Butte">`;
+            // 3. FAA WEBCAM (New reliable public link)
+            // This link uses the "weserv" proxy again to bypass the FAA's security block
+            const faaRawUrl = `weathercams.faa.gov/api/v1/camera/12793/image`;
+            const faaSecureUrl = `https://images.weserv.nl/?url=${faaRawUrl}&t=${now.getTime()}`;
+        
+            document.getElementById('webcam-container').innerHTML = `<img src="${faaSecureUrl}" alt="FAA Webcam">`;
         }
 
         updateImages();
