@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peterson Butte Windgram</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; }
+        .window {
+            width: 800px;  /* Adjust width to fit the chart */
+            height: 600px; /* Adjust height to fit the chart */
+            overflow: hidden;
+            border: 2px solid #333;
+            border-radius: 8px;
+            background: white;
+        }
+        iframe {
+            width: 1200px; /* Width of the original site */
+            height: 2000px; /* Height of the original site */
+            margin-top: -150px; /* Adjust this to "scroll" to the chart */
+            margin-left: -50px; /* Adjust this to center the chart */
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Peterson Butte Forecast</h1>
+    <div class="window">
+        <iframe src="http://wxtofly.net/v2/windgrams.html#Peterson_Butte"></iframe>
+    </div>
+    <p>Data provided by wxtofly.net</p>
+</body>
+</html>
