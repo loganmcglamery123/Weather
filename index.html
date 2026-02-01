@@ -3,38 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Peterson Butte Windgram</title>
+    <title>Peterson Butte Flight Hub</title>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; padding: 20px; }
-        .container { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        img { max-width: 100%; height: auto; display: block; }
-        .refresh-btn { margin-top: 20px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #e9ecef; padding: 20px; }
+        .dashboard { display: grid; grid-template-columns: 1fr; gap: 20px; max-width: 1000px; width: 100%; }
+        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
+        img { max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #ddd; }
+        h2 { margin-top: 0; color: #333; }
+        .refresh-btn { margin-top: 20px; padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        @media (min-columns: 800px) { .dashboard { grid-template-columns: 1fr 1fr; } }
     </style>
 </head>
 <body>
 
-    <h2>Peterson Butte Forecast</h2>
+    <h1>Peterson Butte Hub</h1>
 
-    <div class="container">
-        <div id="image-wrapper">Loading today's forecast...</div>
+    <div class="dashboard">
+        <div class="card">
+            <h2>Live FAA Webcam (West)</h2>
+            <div id="webcam-container">Loading camera...</div>
+        </div>
+
+        <div class="card">
+            <h2>Windgram Forecast</h2>
+            <div id="windgram-container">Loading forecast...</div>
+        </div>
     </div>
 
-    <button class="refresh-btn" onclick="location.reload()">Manual Refresh</button>
+    <button class="refresh-btn" onclick="location.reload()">Refresh All Data</button>
 
     <script>
-        // 1. Get today's date in YYYY-MM-DD format
-        const today = new Date();
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        const dateString = `${yyyy}-${mm}-${dd}`;
+        function updateImages() {
+            const now = new Date();
+            
+            // 1. DATE SETUP (For Windgram)
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const dateStr = `${yyyy}-${mm}-${dd}`;
 
-        // 2. Build the URL (Using the secure proxy to avoid the "Mixed Content" block)
-        const rawUrl = `http://wxtofly.net/windgrams/${dateString}_Peterson_Butte_windgram.png`;
-        const secureUrl = `https://images.weserv.nl/?url=${rawUrl}`;
+            // 2. WINDGRAM (Proxying through weserv for HTTPS)
+            const windgramUrl = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
+            document.getElementById('windgram-container').innerHTML = `<img src="${windgramUrl}" alt="Peterson Butte Windgram">`;
 
-        // 3. Put the image on the screen
-        document.getElementById('image-wrapper').innerHTML = `<img src="${secureUrl}" alt="Windgram for ${dateString}">`;
+            // 3. FAA WEBCAM (Direct link to the latest frame)
+            // Note: FAA IDs for Peterson Butte West are typically Site 762, Camera 12793
+            const webcamUrl = `https://weathercams.faa.gov/api/v1/camera/12793/image?t=${now.getTime()}`;
+            document.getElementById('webcam-container').innerHTML = `<img src="${webcamUrl}" alt="FAA Webcam Peterson Butte">`;
+        }
+
+        updateImages();
     </script>
 
 </body>
