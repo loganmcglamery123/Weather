@@ -5,29 +5,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Peterson Butte Windgram</title>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; }
-        .window {
-            width: 800px;  /* Adjust width to fit the chart */
-            height: 600px; /* Adjust height to fit the chart */
-            overflow: hidden;
-            border: 2px solid #333;
-            border-radius: 8px;
-            background: white;
+        body { 
+            font-family: sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            background: #f0f0f0; 
+            margin-top: 50px;
         }
-        iframe {
-            width: 1200px; /* Width of the original site */
-            height: 2000px; /* Height of the original site */
-            margin-top: -150px; /* Adjust this to "scroll" to the chart */
-            margin-left: -50px; /* Adjust this to center the chart */
+        .image-container {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            max-width: 95%;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+        .refresh-btn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
             border: none;
+            border-radius: 5px;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
-    <h1>Peterson Butte Forecast</h1>
-    <div class="window">
-        <iframe src="http://wxtofly.net/v2/windgrams.html#Peterson_Butte"></iframe>
+
+    <h2>Peterson Butte Forecast</h2>
+
+    <div class="image-container">
+        <img src="http://wxtofly.net/v2/windgrams/Peterson_Butte.png" alt="Windgram Forecast">
     </div>
-    <p>Data provided by wxtofly.net</p>
+
+    <button class="refresh-btn" onclick="location.reload()">Refresh Data</button>
+
+    <p style="font-size: 12px; color: #666;">Source: wxtofly.net</p>
+
 </body>
 </html>
