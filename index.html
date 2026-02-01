@@ -5,59 +5,67 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Peterson Butte Flight Hub</title>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #e9ecef; padding: 20px; }
-        .dashboard { display: grid; grid-template-columns: 1fr; gap: 20px; max-width: 1000px; width: 100%; }
-        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
-        img { max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #ddd; }
-        h2 { margin-top: 0; color: #333; }
-        .refresh-btn { margin-top: 20px; padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-        @media (min-columns: 800px) { .dashboard { grid-template-columns: 1fr 1fr; } }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #e9ecef; padding: 10px; margin: 0; }
+        .dashboard { display: grid; grid-template-columns: 1fr; gap: 15px; width: 100%; max-width: 900px; }
+        .card { background: white; padding: 10px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; overflow: hidden; }
+        h2 { font-size: 1.2rem; margin-bottom: 10px; color: #333; }
+        
+        /* This container crops the FAA site to show ONLY the camera */
+        .camera-window {
+            width: 100%;
+            height: 450px; 
+            position: relative;
+            overflow: hidden;
+            border-radius: 8px;
+        }
+        .camera-window iframe {
+            width: 1200px; /* Width of FAA site */
+            height: 1200px; 
+            position: absolute;
+            top: -240px;  /* Vertical adjustment to center the lens */
+            left: -220px; /* Horizontal adjustment to center the lens */
+            border: none;
+        }
+        
+        .windgram-img { width: 100%; height: auto; border-radius: 8px; }
+        .refresh-btn { margin: 20px; padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        
+        @media (min-width: 800px) { .dashboard { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
 
-    <h1>Peterson Butte Hub</h1>
+    <h1 style="font-size: 1.5rem;">Peterson Butte Hub</h1>
 
     <div class="dashboard">
         <div class="card">
             <h2>Live FAA Webcam (West)</h2>
-            <div id="webcam-container">Loading camera...</div>
+            <div class="camera-window">
+                <iframe src="https://weathercams.faa.gov/map/-122.63218,44.50524,11/cameraSite/762/details/camera/12793/full"></iframe>
+            </div>
         </div>
 
         <div class="card">
             <h2>Windgram Forecast</h2>
-            <div id="windgram-container">Loading forecast...</div>
+            <div id="windgram-container">Loading...</div>
         </div>
     </div>
 
-    <button class="refresh-btn" onclick="location.reload()">Refresh All Data</button>
+    <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
 
     <script>
-        function updateImages() {
+        function loadWindgram() {
             const now = new Date();
-            
-            // 1. Windgram Setup
             const yyyy = now.getFullYear();
             const mm = String(now.getMonth() + 1).padStart(2, '0');
             const dd = String(now.getDate()).padStart(2, '0');
             const dateStr = `${yyyy}-${mm}-${dd}`;
-            const windgramUrl = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
-            document.getElementById('windgram-container').innerHTML = `<img src="${windgramUrl}" alt="Windgram">`;
-    
-            // 2. FAA Webcam Setup (The Reliable Way)
-            // We point to the 'latest' API which handles those long timestamp numbers for us.
-            const faaCameraID = "12793";
-            const faaLatestUrl = `https://weathercams.faa.gov/api/v1/camera/${faaCameraID}/image`;
             
-            // We use the proxy again to ensure it loads on your HTTPS site
-            const finalWebcamUrl = `https://images.weserv.nl/?url=${faaLatestUrl}&t=${now.getTime()}`;
-            
-            document.getElementById('webcam-container').innerHTML = `<img src="${finalWebcamUrl}" alt="Live FAA Cam">`;
+            // Your working Windgram link
+            const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
+            document.getElementById('windgram-container').innerHTML = `<img src="${url}" class="windgram-img" alt="Windgram">`;
         }
-    
-        updateImages();
-        // Refresh the images every 5 minutes automatically while the page is open
-        setInterval(updateImages, 300000); 
+        loadWindgram();
     </script>
 
 </body>
