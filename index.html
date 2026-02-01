@@ -32,31 +32,32 @@
 
     <button class="refresh-btn" onclick="location.reload()">Refresh All Data</button>
 
-
-
     <script>
         function updateImages() {
             const now = new Date();
-        
-            // 1. DATE SETUP (For Windgram)
+            
+            // 1. Windgram Setup
             const yyyy = now.getFullYear();
             const mm = String(now.getMonth() + 1).padStart(2, '0');
             const dd = String(now.getDate()).padStart(2, '0');
             const dateStr = `${yyyy}-${mm}-${dd}`;
-
-            // 2. WINDGRAM (Using the secure proxy)
             const windgramUrl = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
-            document.getElementById('windgram-container').innerHTML = `<img src="${windgramUrl}" alt="Windgram Forecast">`;
-
-            // 3. FAA WEBCAM (New reliable public link)
-            // This link uses the "weserv" proxy again to bypass the FAA's security block
-            const faaRawUrl = `weathercams.faa.gov/api/v1/camera/12793/image`;
-            const faaSecureUrl = `https://images.weserv.nl/?url=${faaRawUrl}&t=${now.getTime()}`;
-        
-            document.getElementById('webcam-container').innerHTML = `<img src="${faaSecureUrl}" alt="FAA Webcam">`;
+            document.getElementById('windgram-container').innerHTML = `<img src="${windgramUrl}" alt="Windgram">`;
+    
+            // 2. FAA Webcam Setup (The Reliable Way)
+            // We point to the 'latest' API which handles those long timestamp numbers for us.
+            const faaCameraID = "12793";
+            const faaLatestUrl = `https://weathercams.faa.gov/api/v1/camera/${faaCameraID}/image`;
+            
+            // We use the proxy again to ensure it loads on your HTTPS site
+            const finalWebcamUrl = `https://images.weserv.nl/?url=${faaLatestUrl}&t=${now.getTime()}`;
+            
+            document.getElementById('webcam-container').innerHTML = `<img src="${finalWebcamUrl}" alt="Live FAA Cam">`;
         }
-
+    
         updateImages();
+        // Refresh the images every 5 minutes automatically while the page is open
+        setInterval(updateImages, 300000); 
     </script>
 
 </body>
