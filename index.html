@@ -6,81 +6,33 @@
     <title>Peterson Butte Hub</title>
     <style>
         * { box-sizing: border-box; }
-
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            background: #f0f2f5; 
-            padding: 10px; 
-            margin: 0; 
-            width: 100%;
-            max-width: 100vw;
-            overflow-x: hidden; 
+            font-family: -apple-system, sans-serif; 
+            display: flex; flex-direction: column; align-items: center; 
+            background: #f0f2f5; padding: 10px; margin: 0; 
+            width: 100%; max-width: 100vw; overflow-x: hidden; 
         }
-        
-        h1 { font-size: 1.5rem; margin: 15px 0; color: #333; }
-        
         .card { 
-            background: white; 
-            padding: 12px; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
-            width: 100%; 
-            max-width: 850px; 
-            margin-bottom: 20px; 
-            text-align: center; 
-            overflow: hidden; 
+            background: white; padding: 12px; border-radius: 12px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; 
+            max-width: 850px; margin-bottom: 20px; text-align: center; overflow: hidden; 
         }
-        
-        h2 { font-size: 1.1rem; color: #333; margin-top: 0; margin-bottom: 10px; }
-
-        /* CONTENT WINDOWS */
-        .window {
-            width: 100%;
-            height: 480px; 
-            position: relative;
-            overflow: hidden;
-            border-radius: 8px;
-            background: #000;
-            touch-action: pan-y;
+        h2 { font-size: 1.1rem; color: #333; margin: 0 0 10px 0; }
+        .window { 
+            width: 100%; height: 480px; position: relative; 
+            overflow: hidden; border-radius: 8px; background: #000; touch-action: pan-y; 
         }
-
-        /* SPECIAL HEIGHT FOR THE WINDY FORECAST TABLE */
-        .forecast-window {
-            width: 100%;
-            height: 220px; /* Adjusted to fit the 187px height of your snippet + padding */
-            position: relative;
-            overflow: hidden;
-            border-radius: 8px;
-            background: #fff;
+        /* Increased height for the 1hr detail table */
+        .forecast-window { 
+            width: 100%; height: 280px; position: relative; 
+            overflow: hidden; border-radius: 8px; background: #fff; 
         }
-
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-
-        #windgram-box img { 
-            width: 100%; 
-            height: auto; 
-            border-radius: 8px; 
-            display: block; 
-        }
-
+        iframe { width: 100%; height: 100%; border: none; }
+        #windgram-box img { width: 100%; height: auto; border-radius: 8px; display: block; }
         .refresh-btn { 
-            padding: 14px 28px; 
-            background: #007bff; 
-            color: white; 
-            border: none; 
-            border-radius: 8px; 
-            cursor: pointer; 
-            font-weight: bold; 
-            margin-bottom: 40px;
-            width: 90%;
-            max-width: 320px;
+            padding: 14px 28px; background: #007bff; color: white; border: none; 
+            border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 40px; 
+            width: 90%; max-width: 320px;
         }
     </style>
 </head>
@@ -93,18 +45,17 @@
         <div class="window">
             <iframe src="https://weathercams.faa.gov/map/-122.63218,44.50524,11/cameraSite/762/details/camera/12793/full" scrolling="no"></iframe>
         </div>
-        <p style="font-size: 0.75rem; color: #666; margin-top: 8px;">Tap thumbnails to switch views</p>
     </div>
 
     <div class="card">
-        <h2>Windy 5-Day Forecast</h2>
+        <h2>Windy 1-Hour Forecast (NAM)</h2>
         <div class="forecast-window">
             <iframe src="https://embed.windy.com/embed.html?type=forecast&location=coordinates&detail=true&detailLat=44.5099&detailLon=-122.9692&product=namConus&metricTemp=default&metricRain=default&metricWind=mph"></iframe>
         </div>
     </div>
 
     <div class="card">
-        <h2>Windgram Forecast (wxtofly)</h2>
+        <h2>Windgram Forecast</h2>
         <div id="windgram-box">Loading...</div>
     </div>
 
@@ -113,16 +64,11 @@
     <script>
         function updateWindgram() {
             const now = new Date();
-            const yyyy = now.getFullYear();
-            const mm = String(now.getMonth() + 1).padStart(2, '0');
-            const dd = String(now.getDate()).padStart(2, '0');
-            const dateStr = `${yyyy}-${mm}-${dd}`;
-            
-            const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
-            document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram Forecast">`;
+            const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png&t=${now.getTime()}`;
+            document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram">`;
         }
         updateWindgram();
     </script>
-
 </body>
 </html>
