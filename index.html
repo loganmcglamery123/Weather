@@ -103,8 +103,8 @@
                     
                     // CONVERSION: m/s to mph is exactly * 2.237
                     const tempF = Math.round((v.temperature.values[i].value * 9/5) + 32);
-                    const speed = Math.round(v.windSpeed.values[i].value * 2.237);
-                    const gust = Math.round(v.windGust.values[i].value * 2.237);
+                    const speed = Math.round(v.windSpeed.values[i].value);
+                    const gust = Math.round(v.windGust.values[i].value);
                     const deg = v.windDirection.values[i].value;
                     const cardinal = getCardinal(deg);
 
