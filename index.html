@@ -8,53 +8,38 @@
         * { box-sizing: border-box; }
 
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            background: #f0f2f5; 
-            padding: 10px; 
-            margin: 0; 
-            width: 100%;
-            max-width: 100vw;
-            overflow-x: hidden; 
+            font-family: -apple-system, sans-serif; 
+            display: flex; flex-direction: column; align-items: center; 
+            background: #f0f2f5; padding: 10px; margin: 0; 
+            width: 100%; max-width: 100vw; overflow-x: hidden; 
         }
         
         h1 { font-size: 1.5rem; margin: 15px 0; color: #333; }
         
         .card { 
-            background: white; 
-            padding: 12px; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
-            width: 100%; 
-            max-width: 850px; 
-            margin-bottom: 20px; 
-            text-align: center; 
-            overflow: hidden; 
+            background: white; padding: 12px; border-radius: 12px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; 
+            max-width: 850px; margin-bottom: 20px; text-align: center; overflow: hidden; 
         }
         
         h2 { font-size: 1.1rem; color: #333; margin-top: 0; margin-bottom: 10px; }
 
-        /* CONTENT WINDOWS */
-        .content-window {
+        .window {
             width: 100%;
-            height: 480px; 
+            height: 500px; 
             position: relative;
             overflow: hidden;
             border-radius: 8px;
             background: #000;
-            /* touch-action: pan-y ensures you can scroll past the map on mobile */
             touch-action: pan-y;
         }
 
-        .content-window iframe {
+        .window iframe {
             width: 100%;
             height: 100%;
             border: none;
         }
 
-        /* WINDGRAM BOX */
         #windgram-box img { 
             width: 100%; 
             height: auto; 
@@ -63,19 +48,10 @@
         }
 
         .refresh-btn { 
-            padding: 14px 28px; 
-            background: #007bff; 
-            color: white; 
-            border: none; 
-            border-radius: 8px; 
-            cursor: pointer; 
-            font-weight: bold; 
-            margin-bottom: 40px;
-            width: 90%;
-            max-width: 320px;
+            padding: 14px 28px; background: #007bff; color: white; border: none; 
+            border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 40px;
+            width: 90%; max-width: 320px;
         }
-        
-        .footer-note { font-size: 0.75rem; color: #888; margin-bottom: 20px; }
     </style>
 </head>
 <body>
@@ -84,31 +60,25 @@
 
     <div class="card">
         <h2>Live FAA Webcam</h2>
-        <div class="content-window">
+        <div class="window">
             <iframe src="https://weathercams.faa.gov/map/-122.63218,44.50524,11/cameraSite/762/details/camera/12793/full" scrolling="no"></iframe>
         </div>
         <p style="font-size: 0.75rem; color: #666; margin-top: 8px;">Tap thumbnails to switch views</p>
     </div>
 
     <div class="card">
-        <h2>Windy Interactive (HRRR Model)</h2>
-        <div class="content-window" style="height: 550px;">
-            <iframe 
-                src="https://www.windy.com/multimodel/44.505/-122.632?44.505,-122.632,12,m:eX3acLq&model=hrrr" 
-                allowfullscreen>
-            </iframe>
+        <h2>Windy Interactive Forecast</h2>
+        <div class="window" style="height: 600px;">
+            <iframe src="https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=default&metricTemp=default&metricWind=default&zoom=11&overlay=wind&product=ecmwf&level=surface&lat=44.238&lon=-122.965" frameborder="0"></iframe>
         </div>
-        <p style="font-size: 0.75rem; color: #666; margin-top: 8px;">Pinch to zoom • Slide to move map</p>
     </div>
 
     <div class="card">
-        <h2>Windgram Forecast</h2>
+        <h2>Windgram Forecast (wxtofly)</h2>
         <div id="windgram-box">Loading...</div>
     </div>
 
-    <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
-    
-    <div class="footer-note">Data sources: Windy, FAA, and wxtofly.net</div>
+    <button class="refresh-btn" onclick="location.reload()">Refresh All Data</button>
 
     <script>
         function updateWindgram() {
@@ -118,7 +88,6 @@
             const dd = String(now.getDate()).padStart(2, '0');
             const dateStr = `${yyyy}-${mm}-${dd}`;
             
-            // Proxy to handle HTTP on HTTPS site
             const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
             document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram Forecast">`;
         }
