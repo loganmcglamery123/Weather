@@ -63,98 +63,107 @@
     <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
 
     <script>
-        // CONFIGURATION: Set your exact coordinates here
-        const LAT = 44.51;
-        const LON = -122.968889;
-
-        // Helper: Convert "NW", "NNW" etc. to degrees for arrow rotation
-        function getDegrees(cardinal) {
-            const directions = {
-                "N": 0, "NNE": 22.5, "NE": 45, "ENE": 67.5,
-                "E": 90, "ESE": 112.5, "SE": 135, "SSE": 157.5,
-                "S": 180, "SSW": 202.5, "SW": 225, "WSW": 247.5,
-                "W": 270, "WNW": 292.5, "NW": 315, "NNW": 337.5
-            };
-            return directions[cardinal] || 0;
-        }
-
-        async function getPreciseForecast() {
-            const tableBody = document.getElementById('forecast-body');
-            
-            try {
-                // STEP 1: Get the Grid URL for this specific location
-                // The NWS divides the USA into 2.5km grid squares. We need to find WHICH square we are in.
-                const pointRes = await fetch(`https://api.weather.gov/points/${LAT},${LON}`);
-                if (!pointRes.ok) throw new Error("Could not find grid for location");
-                
-                const pointData = await pointRes.json();
-                
-                // The API gives us the exact link for this grid's hourly forecast
-                const forecastUrl = pointData.properties.forecastHourly;
-
-                // STEP 2: Fetch the forecast using that specific URL
-                const forecastRes = await fetch(forecastUrl);
-                if (!forecastRes.ok) throw new Error("Could not load forecast data");
-                
-                const forecastData = await forecastRes.json();
-                const periods = forecastData.properties.periods;
-
-                let html = "";
-
-                // Render the next 12 hours
-                for (let i = 0; i < 12; i++) {
-                    const p = periods[i];
-                    if (!p) break;
-
-                    const timeLabel = new Date(p.startTime).toLocaleTimeString([], { hour: 'numeric', hour12: true });
-                    
-                    // Parse "15 mph" -> 15
-                    const speed = parseInt(p.windSpeed) || 0;
-                    
-                    // Gusts are sometimes null. If null, show "-"
-                    const gustVal = p.windGust ? parseInt(p.windGust) : "-";
-                    const gustDisplay = gustVal !== "-" ? `${gustVal} mph` : "-";
-
-                    const cardinal = p.windDirection;
-                    const deg = getDegrees(cardinal);
-
-                    html += `<tr>
-                        <td>${timeLabel}</td>
-                        <td>${p.temperature}°</td>
-                        <td>${speed} mph</td>
-                        <td class="gust">${gustDisplay}</td>
-                        <td>
-                            <div class="wind-box">
-                                <span class="arrow" style="transform: rotate(${deg}deg)">↓</span>
-                                <span class="cardinal">${cardinal}</span>
-                            </div>
-                        </td>
-                    </tr>`;
-                }
-                tableBody.innerHTML = html;
-
-            } catch (err) {
-                console.error(err);
-                tableBody.innerHTML = "<tr><td colspan='5'>Error loading data. Retrying...</td></tr>";
-                // Retry logic just in case the API hiccups
-                setTimeout(getPreciseForecast, 5000);
+            // CONFIGURATION: Peterson Butte
+            const LAT = 44.51;
+            const LON = -122.968889;
+    
+            // Helper to convert Degrees to Cardinal (for display text if needed)
+            // Note: The arrow uses raw degrees, which is better.
+            function getDegrees(cardinal) {
+                // Not needed for Open-Meteo as it gives us numbers directly!
+                // We keep this placeholder or just use raw values.
             }
-        }
-
-        function updateWindgram() {
-            const now = new Date();
-            const yyyy = now.getFullYear();
-            const mm = String(now.getMonth() + 1).padStart(2, '0');
-            const dd = String(now.getDate()).padStart(2, '0');
-            const dateStr = `${yyyy}-${mm}-${dd}`;
-            
-            const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
-            document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram for ${dateStr}">`;
-        }
-
-        // Initialize
-        getPreciseForecast();
-        updateWindgram();
-    </script>
+    
+            async function getHRRRForecast() {
+                const tableBody = document.getElementById('forecast-body');
+                
+                // OPEN-METEO API URL
+                // models=hrrr_us  -> Forces the High Resolution Rapid Refresh model
+                // units -> mph and fahrenheit
+                // timezone=auto -> Matches the local time of the coordinates
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timeformat=iso8601&timezone=auto&forecast_days=1&models=hrrr_us`;
+    
+                try {
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error("Open-Meteo API Error");
+                    
+                    const data = await res.json();
+                    
+                    // Open-Meteo returns "Columnar" data (arrays), not a list of objects.
+                    // We need to access data.hourly.temperature_2m[index], etc.
+                    const hourly = data.hourly;
+                    
+                    let html = "";
+                    
+                    // Find the current hour index to start displaying from "Now"
+                    const nowIso = new Date().toISOString().slice(0, 13); // "2023-10-27T10"
+                    
+                    // Simple loop for next 12 hours
+                    // We find the index where the time is closest to now
+                    const now = new Date();
+                    let startIndex = 0;
+                    
+                    // Scan for the first hour that is >= current hour
+                    for (let i = 0; i < hourly.time.length; i++) {
+                        if (new Date(hourly.time[i]) >= now) {
+                            startIndex = i;
+                            break;
+                        }
+                    }
+    
+                    for (let i = startIndex; i < startIndex + 12; i++) {
+                        // Stop if we run out of data
+                        if (!hourly.time[i]) break;
+    
+                        const dateObj = new Date(hourly.time[i]);
+                        const timeLabel = dateObj.toLocaleTimeString([], { hour: 'numeric', hour12: true });
+    
+                        const temp = Math.round(hourly.temperature_2m[i]);
+                        const speed = Math.round(hourly.wind_speed_10m[i]);
+                        const gust = Math.round(hourly.wind_gusts_10m[i]);
+                        const dir = hourly.wind_direction_10m[i];
+                        
+                        // Convert degrees to cardinal text for the label
+                        const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+                        const cardinalStr = cardinals[Math.round(dir / 22.5) % 16];
+    
+                        // Highlight strong gusts (e.g. if gust is 5mph higher than sustain)
+                        const gustClass = (gust > speed + 5) ? "gust" : "";
+    
+                        html += `<tr>
+                            <td>${timeLabel}</td>
+                            <td>${temp}°</td>
+                            <td>${speed} mph</td>
+                            <td class="${gustClass}">${gust} mph</td>
+                            <td>
+                                <div class="wind-box">
+                                    <span class="arrow" style="transform: rotate(${dir}deg)">↓</span>
+                                    <span class="cardinal">${cardinalStr}</span>
+                                </div>
+                            </td>
+                        </tr>`;
+                    }
+                    tableBody.innerHTML = html;
+    
+                } catch (err) {
+                    console.error(err);
+                    tableBody.innerHTML = "<tr><td colspan='5'>Error loading HRRR data.</td></tr>";
+                }
+            }
+    
+            function updateWindgram() {
+                const now = new Date();
+                const yyyy = now.getFullYear();
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const dd = String(now.getDate()).padStart(2, '0');
+                const dateStr = `${yyyy}-${mm}-${dd}`;
+                
+                const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
+                document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram for ${dateStr}">`;
+            }
+    
+            getHRRRForecast();
+            updateWindgram();
+        </script>
 </body>
 </html>
