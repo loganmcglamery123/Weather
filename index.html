@@ -36,10 +36,10 @@
         
         h2 { font-size: 1.1rem; color: #333; margin-top: 0; margin-bottom: 10px; }
 
-        /* UNIVERSAL WINDOW BOX */
+        /* UNIVERSAL WINDOW BOX (Standard) */
         .content-window {
             width: 100%;
-            height: 480px; 
+            height: 580px; 
             position: relative;
             overflow: hidden;
             border-radius: 8px;
@@ -51,6 +51,32 @@
             width: 100%;
             height: 100%;
             border: none;
+        }
+
+        /* XC SKIES SPECIAL ZOOM & SHIFT */
+        .xc-window {
+            width: 100%;
+            height: 550px; /* Taller window for map navigation */
+            position: relative;
+            overflow: hidden;
+            border-radius: 8px;
+            background: #000;
+            touch-action: pan-y;
+        }
+
+        .xc-window iframe {
+            position: absolute;
+            width: 160%; /* Creates a larger 'virtual' width to push menus off */
+            height: 160%;
+            border: none;
+            
+            /* Zoom & Origin: Scaled down to fit the card while hiding popups */
+            transform: scale(0.65); 
+            transform-origin: 0 0;
+            
+            /* Pushes the 'Subscribe' popup to the left and top header out of view */
+            top: -60px; 
+            left: -420px; 
         }
 
         /* WINDGRAM BOX */
@@ -88,15 +114,15 @@
     </div>
 
     <div class="card">
-        <h2>XC Skies (Peterson Butte View)</h2>
-        <div class="content-window" style="height: 550px;">
+        <h2>XC Skies Forecast Map</h2>
+        <div class="xc-window">
             <iframe 
-                src="https://www.xcskies.com/map?lat=44.5052&lon=-122.6322&zoom=11" 
+                src="https://www.xcskies.com/map?lat=44.5052&lon=-122.6322&zoom=13" 
                 scrolling="no" 
                 loading="lazy">
             </iframe>
         </div>
-        <p style="font-size: 0.7rem; color: #666; margin-top: 5px;">Map centers on Peterson Butte coordinates</p>
+        <p style="font-size: 0.7rem; color: #666; margin-top: 5px;">Zoomed on Peterson Butte; popups hidden</p>
     </div>
 
     <div class="card">
@@ -114,7 +140,6 @@
             const dd = String(now.getDate()).padStart(2, '0');
             const dateStr = `${yyyy}-${mm}-${dd}`;
             
-            // Secure proxy to allow HTTP image on HTTPS site
             const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
             document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram Forecast">`;
         }
