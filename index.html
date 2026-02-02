@@ -36,7 +36,7 @@
     </div>
 
     <div class="card">
-        <h2>Hourly NAM Forecast (mph)</h2>
+        <h2>Hourly Point Forecast (NWS)</h2>
         <div class="table-container">
             <table id="forecast-table">
                 <thead>
@@ -49,7 +49,7 @@
                     </tr>
                 </thead>
                 <tbody id="forecast-body">
-                    <tr><td colspan="5">Syncing with current hour...</td></tr>
+                    <tr><td colspan="5">Locating grid and loading forecast...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -63,51 +63,66 @@
     <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
 
     <script>
-        function getCardinal(angle) {
-            const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-            return directions[Math.round(angle / 22.5) % 16];
+        // CONFIGURATION: Set your exact coordinates here
+        const LAT = 44.51;
+        const LON = -122.968889;
+
+        // Helper: Convert "NW", "NNW" etc. to degrees for arrow rotation
+        function getDegrees(cardinal) {
+            const directions = {
+                "N": 0, "NNE": 22.5, "NE": 45, "ENE": 67.5,
+                "E": 90, "ESE": 112.5, "SE": 135, "SSE": 157.5,
+                "S": 180, "SSW": 202.5, "SW": 225, "WSW": 247.5,
+                "W": 270, "WNW": 292.5, "NW": 315, "NNW": 337.5
+            };
+            return directions[cardinal] || 0;
         }
 
-        async function getRawNAMData() {
+        async function getPreciseForecast() {
+            const tableBody = document.getElementById('forecast-body');
+            
             try {
-                const res = await fetch("https://api.weather.gov/gridpoints/PQR/101,84");
-                const data = await res.json();
-                const v = data.properties;
-
-                const nowUTC = new Date();
-                let html = "";
+                // STEP 1: Get the Grid URL for this specific location
+                // The NWS divides the USA into 2.5km grid squares. We need to find WHICH square we are in.
+                const pointRes = await fetch(`https://api.weather.gov/points/${LAT},${LON}`);
+                if (!pointRes.ok) throw new Error("Could not find grid for location");
                 
-                // 1. Find the current hour's index
-                let startIndex = v.windSpeed.values.findIndex(entry => {
-                    const entryTime = new Date(entry.validTime.split('/')[0]);
-                    // Check if entry time is greater than or equal to current hour
-                    return entryTime >= new Date(nowUTC.setMinutes(0,0,0));
-                });
+                const pointData = await pointRes.json();
+                
+                // The API gives us the exact link for this grid's hourly forecast
+                const forecastUrl = pointData.properties.forecastHourly;
 
-                if (startIndex === -1) startIndex = 0;
+                // STEP 2: Fetch the forecast using that specific URL
+                const forecastRes = await fetch(forecastUrl);
+                if (!forecastRes.ok) throw new Error("Could not load forecast data");
+                
+                const forecastData = await forecastRes.json();
+                const periods = forecastData.properties.periods;
 
-                // 2. Loop through next 12 hours
-                for (let i = startIndex; i < startIndex + 12; i++) {
-                    const entry = v.windSpeed.values[i];
-                    if (!entry) break;
+                let html = "";
 
-                    const timeLabel = new Date(entry.validTime.split('/')[0]).toLocaleTimeString([], { hour: 'numeric', hour12: true });
+                // Render the next 12 hours
+                for (let i = 0; i < 12; i++) {
+                    const p = periods[i];
+                    if (!p) break;
+
+                    const timeLabel = new Date(p.startTime).toLocaleTimeString([], { hour: 'numeric', hour12: true });
                     
-                    // CONVERSION: 19 units -> 6 mph means the raw data is km/h.
-                    // km/h * 0.621371 = mph
-                    const multiplier = 0.621371;
+                    // Parse "15 mph" -> 15
+                    const speed = parseInt(p.windSpeed) || 0;
                     
-                    const tempF = Math.round((v.temperature.values[i].value * 1.8) + 32);
-                    const speed = Math.round(v.windSpeed.values[i].value * multiplier);
-                    const gust = Math.round(v.windGust.values[i].value * multiplier);
-                    const deg = v.windDirection.values[i].value;
-                    const cardinal = getCardinal(deg);
+                    // Gusts are sometimes null. If null, show "-"
+                    const gustVal = p.windGust ? parseInt(p.windGust) : "-";
+                    const gustDisplay = gustVal !== "-" ? `${gustVal} mph` : "-";
+
+                    const cardinal = p.windDirection;
+                    const deg = getDegrees(cardinal);
 
                     html += `<tr>
                         <td>${timeLabel}</td>
-                        <td>${tempF}°</td>
+                        <td>${p.temperature}°</td>
                         <td>${speed} mph</td>
-                        <td class="gust">${gust} mph</td>
+                        <td class="gust">${gustDisplay}</td>
                         <td>
                             <div class="wind-box">
                                 <span class="arrow" style="transform: rotate(${deg}deg)">↓</span>
@@ -116,9 +131,13 @@
                         </td>
                     </tr>`;
                 }
-                document.getElementById('forecast-body').innerHTML = html;
+                tableBody.innerHTML = html;
+
             } catch (err) {
-                document.getElementById('forecast-body').innerHTML = "<tr><td colspan='5'>Error loading NWS data.</td></tr>";
+                console.error(err);
+                tableBody.innerHTML = "<tr><td colspan='5'>Error loading data. Retrying...</td></tr>";
+                // Retry logic just in case the API hiccups
+                setTimeout(getPreciseForecast, 5000);
             }
         }
 
@@ -129,12 +148,12 @@
             const dd = String(now.getDate()).padStart(2, '0');
             const dateStr = `${yyyy}-${mm}-${dd}`;
             
-            // RESTORED YOUR EXACT WORKING LOGIC
             const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
             document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram for ${dateStr}">`;
         }
 
-        getRawNAMData();
+        // Initialize
+        getPreciseForecast();
         updateWindgram();
     </script>
 </body>
