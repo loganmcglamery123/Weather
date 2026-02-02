@@ -89,7 +89,7 @@
                 periods.forEach(p => {
                     const time = new Date(p.startTime).toLocaleTimeString([], { hour: 'numeric', hour12: true });
                     const windSpeed = p.windSpeed;
-                    const windGust = p.windGust || "--";
+                    const windGust = p.windGust;
                     const windDir = p.windDirection;
 
                     html += `<tr>
