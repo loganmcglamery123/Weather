@@ -6,26 +6,12 @@
     <title>Peterson Butte Hub</title>
     <style>
         * { box-sizing: border-box; }
-        body { 
-            font-family: sans-serif; display: flex; flex-direction: column; 
-            align-items: center; background: #f0f2f5; padding: 10px; margin: 0; 
-        }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f2f5; padding: 10px; margin: 0; }
         h1 { font-size: 1.5rem; margin: 15px 0; color: #333; }
-        .card { 
-            background: white; padding: 15px; border-radius: 12px; 
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; 
-            max-width: 850px; margin-bottom: 20px; text-align: center; overflow: hidden; 
-        }
+        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 850px; margin-bottom: 20px; text-align: center; overflow: hidden; }
         h2 { font-size: 1.2rem; color: #333; margin-top: 0; margin-bottom: 10px; }
-
-        /* THE WEBCAM WINDOW */
-        .camera-window {
-            width: 100%; height: 590px; position: relative; overflow: hidden;
-            border-radius: 8px; background: #000; touch-action: pan-y; 
-        }
+        .camera-window { width: 100%; height: 590px; position: relative; overflow: hidden; border-radius: 8px; background: #000; touch-action: pan-y; }
         .camera-window iframe { width: 100%; height: 100%; border: none; overflow: hidden; }
-
-        /* TABLE STYLING */
         .table-container { overflow-x: auto; border-radius: 8px; border: 1px solid #ddd; margin-top: 10px; }
         table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; }
         th, td { padding: 12px 8px; border-bottom: 1px solid #eee; text-align: center; }
@@ -34,14 +20,8 @@
         .wind-box { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
         .arrow { font-size: 1.2rem; line-height: 1; display: inline-block; font-weight: bold; color: #007bff; }
         .cardinal { font-size: 0.7rem; font-weight: bold; color: #555; }
-
-        /* WINDGRAM STYLING */
         #windgram-box img { width: 100%; height: auto; border-radius: 8px; display: block; }
-
-        .refresh-btn { 
-            padding: 12px 24px; background: #007bff; color: white; border: none; 
-            border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 40px; 
-        }
+        .refresh-btn { padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 40px; }
     </style>
 </head>
 <body>
@@ -53,7 +33,6 @@
         <div class="camera-window">
             <iframe src="https://weathercams.faa.gov/map/-122.63218,44.50524,11/cameraSite/762/details/camera/12793/full" scrolling="no"></iframe>
         </div>
-        <p style="font-size: 0.8rem; color: #666; margin-top: 10px;">Tap thumbnails to change views</p>
     </div>
 
     <div class="card">
@@ -70,19 +49,18 @@
                     </tr>
                 </thead>
                 <tbody id="forecast-body">
-                    <tr><td colspan="5">Loading model data...</td></tr>
+                    <tr><td colspan="5">Syncing with current hour...</td></tr>
                 </tbody>
             </table>
         </div>
-        <p style="font-size: 0.7rem; color: #888; margin-top: 10px;">1-hour intervals from NWS Raw Grid (NAM-3km)</p>
     </div>
 
     <div class="card">
         <h2>Windgram Forecast</h2>
-        <div id="windgram-box">Loading today's forecast...</div>
+        <div id="windgram-box">Loading...</div>
     </div>
 
-    <button class="refresh-btn" onclick="location.reload()">Refresh All Data</button>
+    <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
 
     <script>
         function getCardinal(angle) {
@@ -92,19 +70,32 @@
 
         async function getRawNAMData() {
             try {
-                // Fetching raw grid data (meters per second)
                 const res = await fetch("https://api.weather.gov/gridpoints/PQR/101,84");
                 const data = await res.json();
                 const v = data.properties;
 
+                const now = new Date();
                 let html = "";
-                for (let i = 0; i < 10; i++) {
-                    const time = new Date(v.windSpeed.values[i].validTime.split('/')[0]).toLocaleTimeString([], { hour: 'numeric', hour12: true });
+                let count = 0;
+
+                // Find the first index that matches or is AFTER the current time
+                let startIndex = v.windSpeed.values.findIndex(entry => {
+                    const entryTime = new Date(entry.validTime.split('/')[0]);
+                    return entryTime >= new Date(now.setMinutes(0,0,0));
+                });
+
+                if (startIndex === -1) startIndex = 0;
+
+                for (let i = startIndex; i < startIndex + 10; i++) {
+                    const entry = v.windSpeed.values[i];
+                    if (!entry) break;
+
+                    const time = new Date(entry.validTime.split('/')[0]).toLocaleTimeString([], { hour: 'numeric', hour12: true });
                     
-                    // CONVERSION: m/s to mph is exactly * 2.237
+                    // CONVERSION: Raw data is m/s. m/s * 2.237 = mph
                     const tempF = Math.round((v.temperature.values[i].value * 9/5) + 32);
-                    const speed = Math.round(v.windSpeed.values[i].value);
-                    const gust = Math.round(v.windGust.values[i].value);
+                    const speed = Math.round(v.windSpeed.values[i].value * 2.237);
+                    const gust = Math.round(v.windGust.values[i].value * 2.237);
                     const deg = v.windDirection.values[i].value;
                     const cardinal = getCardinal(deg);
 
@@ -133,8 +124,6 @@
             const mm = String(now.getMonth() + 1).padStart(2, '0');
             const dd = String(now.getDate()).padStart(2, '0');
             const dateStr = `${yyyy}-${mm}-${dd}`;
-            
-            // YOUR ORIGINAL WORKING WINDGRAM LOGIC
             const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
             document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram for ${dateStr}">`;
         }
@@ -142,6 +131,5 @@
         getRawNAMData();
         updateWindgram();
     </script>
-
 </body>
 </html>
