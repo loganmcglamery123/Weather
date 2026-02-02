@@ -1,120 +1,74 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Peterson Butte Hub</title>
-    <style>
-        * { box-sizing: border-box; }
-        body { 
-            font-family: -apple-system, sans-serif; display: flex; flex-direction: column; 
-            align-items: center; background: #f0f2f5; padding: 10px; margin: 0; 
-            width: 100%; max-width: 100vw; overflow-x: hidden; 
-        }
-        .card { 
-            background: white; padding: 12px; border-radius: 12px; 
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; 
-            max-width: 850px; margin-bottom: 20px; text-align: center; 
-        }
-        h2 { font-size: 1.1rem; color: #333; margin: 0 0 10px 0; }
-        
-        /* CUSTOM TABLE STYLING */
-        .table-container { overflow-x: auto; border-radius: 8px; border: 1px solid #ddd; }
-        table { width: 100%; border-collapse: collapse; background: white; font-size: 0.9rem; }
-        th, td { padding: 8px; border-bottom: 1px solid #eee; text-align: center; }
-        th { background: #007bff; color: white; font-weight: bold; position: sticky; top: 0; }
-        .gust { color: #d9534f; font-weight: bold; }
-        .dir { display: inline-block; transition: transform 0.3s; }
-
-        .window { width: 100%; height: 480px; position: relative; overflow: hidden; border-radius: 8px; background: #000; }
-        iframe { width: 100%; height: 100%; border: none; }
-        #windgram-box img { width: 100%; height: auto; border-radius: 8px; display: block; }
-        .refresh-btn { padding: 14px 28px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 90%; max-width: 320px; margin-bottom: 40px;}
-    </style>
-</head>
-<body>
-
-    <h1>Peterson Butte Hub</h1>
-
-    <div class="card">
-        <h2>Live FAA Webcam</h2>
-        <div class="window">
-            <iframe src="https://weathercams.faa.gov/map/-122.63218,44.50524,11/cameraSite/762/details/camera/12793/full" scrolling="no"></iframe>
-        </div>
+<div class="card">
+    <h2>Custom Hourly NAM Forecast (Raw Data)</h2>
+    <div class="table-container">
+        <table id="forecast-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Temp</th>
+                    <th>Wind</th>
+                    <th>Gust</th>
+                    <th>Dir</th>
+                </tr>
+            </thead>
+            <tbody id="forecast-body">
+                <tr><td colspan="5">Fetching Raw NAM 3km data...</td></tr>
+            </tbody>
+        </table>
     </div>
+    <p style="font-size: 0.7rem; color: #666; margin-top: 5px;">Source: NWS Grid Data (NAM-3km)</p>
+</div>
 
-    <div class="card">
-        <h2>Custom Hourly Forecast (NWS RAW)</h2>
-        <div class="table-container">
-            <table id="forecast-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Temp</th>
-                        <th>Wind</th>
-                        <th>Gust</th>
-                        <th>Dir</th>
-                    </tr>
-                </thead>
-                <tbody id="forecast-body">
-                    <tr><td colspan="5">Fetching latest NAM/HRRR data...</td></tr>
-                </tbody>
-            </table>
-        </div>
-        <p style="font-size: 0.7rem; color: #666; margin-top: 5px;">Data: NWS API (Hourly)</p>
-    </div>
+<script>
+    async function getRawNAMData() {
+        try {
+            // 1. Get the Raw Grid Data for Peterson Butte
+            // This endpoint contains the high-res model arrays (NAM/HRRR)
+            const gridUrl = "https://api.weather.gov/gridpoints/PQR/101,84"; 
+            const res = await fetch(gridUrl);
+            const data = await res.json();
+            const props = data.properties;
 
-    <div class="card">
-        <h2>Windgram Forecast</h2>
-        <div id="windgram-box">Loading...</div>
-    </div>
+            // Helper to find the value for the current hour in NWS weird time formats
+            const getValueAtTime = (prop) => {
+                const now = new Date().toISOString();
+                const entry = prop.values.find(v => now >= v.validTime.split('/')[0]);
+                return entry ? Math.round(entry.value * 2.23694) : "--"; // Convert m/s to mph
+            };
 
-    <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
-
-    <script>
-        async function getForecast() {
-            try {
-                // 1. Get the grid points for Peterson Butte
-                const pointsUrl = "https://api.weather.gov/points/44.510,-122.969";
-                const pointsRes = await fetch(pointsUrl);
-                const pointsData = await pointsRes.json();
-                
-                // 2. Fetch the hourly forecast using those points
-                const forecastUrl = pointsData.properties.forecastHourly;
-                const forecastRes = await fetch(forecastUrl);
-                const forecastData = await forecastRes.json();
-                const periods = forecastData.properties.periods.slice(0, 12); // Show next 12 hours
-
-                let html = "";
-                periods.forEach(p => {
-                    const time = new Date(p.startTime).toLocaleTimeString([], { hour: 'numeric', hour12: true });
-                    const windSpeed = p.windSpeed;
-                    const windGust = p.windGust;
-                    const windDir = p.windDirection;
-
-                    html += `<tr>
-                        <td>${time}</td>
-                        <td>${p.temperature}°</td>
-                        <td>${windSpeed}</td>
-                        <td class="gust">${windGust}</td>
-                        <td><span class="dir">${windDir}</span></td>
-                    </tr>`;
-                });
-                document.getElementById('forecast-body').innerHTML = html;
-            } catch (err) {
-                document.getElementById('forecast-body').innerHTML = "<tr><td colspan='5'>Error loading data.</td></tr>";
-            }
-        }
-
-        function updateWindgram() {
+            // 2. Build the table for the next 8 hours
+            let html = "";
             const now = new Date();
-            const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-            const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png&t=${now.getTime()}`;
-            document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram">`;
-        }
 
-        getForecast();
-        updateWindgram();
-    </script>
-</body>
-</html>
+            for (let i = 0; i < 8; i++) {
+                const forecastTime = new Date(now.getTime() + (i * 60 * 60 * 1000));
+                const timeStr = forecastTime.toLocaleTimeString([], { hour: 'numeric', hour12: true });
+
+                // NWS Grid units are metric; we convert to mph/F
+                const tempC = props.temperature.values[i].value;
+                const tempF = Math.round((tempC * 9/5) + 32);
+                
+                const speedMps = props.windSpeed.values[i].value;
+                const speedMph = Math.round(speedMps * 2.23694);
+                
+                // Extracting Gust - RAW grid almost always has this value
+                const gustMps = props.windGust.values[i] ? props.windGust.values[i].value : speedMps;
+                const gustMph = Math.round(gustMps * 2.23694);
+                
+                const deg = props.windDirection.values[i].value;
+                
+                html += `<tr>
+                    <td>${timeStr}</td>
+                    <td>${tempF}°</td>
+                    <td>${speedMph}</td>
+                    <td class="gust">${gustMph}</td>
+                    <td><span class="dir" style="transform: rotate(${deg}deg)">↓</span></td>
+                </tr>`;
+            }
+            document.getElementById('forecast-body').innerHTML = html;
+        } catch (err) {
+            document.getElementById('forecast-body').innerHTML = "<tr><td colspan='5'>Error: Model data unavailable.</td></tr>";
+        }
+    }
+    getRawNAMData();
+</script>
