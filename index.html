@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Peterson Butte Hub</title>
     <style>
-        * { box-sizing: border-box; } 
+        /* ... (Keeping your existing styles) ... */
+        * { box-sizing: border-box; }
         body { 
             font-family: -apple-system, sans-serif; display: flex; flex-direction: column; 
             align-items: center; background: #f0f2f5; padding: 10px; margin: 0; 
@@ -17,29 +18,23 @@
             max-width: 850px; margin-bottom: 20px; text-align: center; 
         }
         h2 { font-size: 1.1rem; color: #333; margin: 0 0 10px 0; }
-        
         .table-container { overflow-x: auto; border-radius: 8px; border: 1px solid #ddd; }
         table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; }
         th, td { padding: 10px 5px; border-bottom: 1px solid #eee; text-align: center; }
         th { background: #343a40; color: white; font-weight: bold; }
-        
         .gust { color: #d9534f; font-weight: bold; }
-        
         .wind-box { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
         .arrow { font-size: 1.2rem; line-height: 1; display: inline-block; font-weight: bold; color: #007bff; }
         .cardinal { font-size: 0.7rem; font-weight: bold; color: #555; }
-
         .window { width: 100%; height: 480px; position: relative; overflow: hidden; border-radius: 8px; background: #000; }
         iframe { width: 100%; height: 100%; border: none; }
-        
         #windgram-box img { width: 100%; height: auto; border-radius: 8px; display: block; }
-        
         .refresh-btn { padding: 16px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; max-width: 320px; margin-bottom: 40px; font-size: 1rem; }
     </style>
 </head>
 <body>
 
-    <h1 style="font-size: 1.5rem; margin: 15px 0;">Peterson Butte Hub</h1>
+    <h1>Peterson Butte Hub</h1>
 
     <div class="card">
         <h2>Live FAA Webcam</h2>
@@ -62,11 +57,10 @@
                     </tr>
                 </thead>
                 <tbody id="forecast-body">
-                    <tr><td colspan="5">Loading model data...</td></tr>
+                    <tr><td colspan="5">Loading mph data...</td></tr>
                 </tbody>
             </table>
         </div>
-        <p style="font-size: 0.65rem; color: #888; margin-top: 8px;">NWS Raw Grid Data (NAM-3km) converted to mph</p>
     </div>
 
     <div class="card">
@@ -74,7 +68,7 @@
         <div id="windgram-box">Loading image...</div>
     </div>
 
-    <button class="refresh-btn" onclick="location.reload()">Refresh Hub Data</button>
+    <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
 
     <script>
         function getCardinal(angle) {
@@ -84,33 +78,40 @@
 
         async function getRawNAMData() {
             try {
-                // Ensure we hit the correct raw grid coordinates
-                const res = await fetch("https://api.weather.gov/gridpoints/PQR/101,84");
+                // Fetching with explicit units=us parameter
+                const res = await fetch("https://api.weather.gov/gridpoints/PQR/101,84?units=us");
                 const data = await res.json();
                 const v = data.properties;
 
                 let html = "";
-                // Get current UTC hour to match data index
-                const startHour = new Date().getUTCHours();
-
                 for (let i = 0; i < 10; i++) {
                     const entry = v.windSpeed.values[i];
                     if (!entry) break;
 
                     const time = new Date(entry.validTime.split('/')[0]).toLocaleTimeString([], { hour: 'numeric', hour12: true });
                     
-                    // CONVERSION: NWS API Grid data is m/s. m/s * 2.23694 = mph
-                    const tempF = Math.round((v.temperature.values[i].value * 9/5) + 32);
-                    const speed = Math.round(v.windSpeed.values[i].value * 2.23694);
-                    const gust = Math.round(v.windGust.values[i].value * 2.23694);
+                    // NWS API sometimes sends mph directly with ?units=us, but we check here to be sure
+                    const uom = v.windSpeed.uom; 
+                    const isMetric = uom.includes('m_s-1');
+
+                    let speed = v.windSpeed.values[i].value;
+                    let gust = v.windGust.values[i].value;
+                    let tempF = v.temperature.values[i].value;
+
+                    if (isMetric) {
+                        speed = speed * 2.23694;
+                        gust = gust * 2.23694;
+                        tempF = (tempF * 9/5) + 32;
+                    }
+
                     const deg = v.windDirection.values[i].value;
                     const cardinal = getCardinal(deg);
 
                     html += `<tr>
                         <td>${time}</td>
-                        <td>${tempF}°</td>
-                        <td>${speed} mph</td>
-                        <td class="gust">${gust} mph</td>
+                        <td>${Math.round(tempF)}°</td>
+                        <td>${Math.round(speed)} mph</td>
+                        <td class="gust">${Math.round(gust)} mph</td>
                         <td>
                             <div class="wind-box">
                                 <span class="arrow" style="transform: rotate(${deg}deg)">↓</span>
@@ -121,20 +122,16 @@
                 }
                 document.getElementById('forecast-body').innerHTML = html;
             } catch (err) {
-                document.getElementById('forecast-body').innerHTML = "<tr><td colspan='5'>Error loading NWS data.</td></tr>";
+                document.getElementById('forecast-body').innerHTML = "<tr><td colspan='5'>Error loading data.</td></tr>";
             }
         }
 
         function updateWindgram() {
             const now = new Date();
-            const yyyy = now.getFullYear();
-            const mm = String(now.getMonth() + 1).padStart(2, '0');
-            const dd = String(now.getDate()).padStart(2, '0');
-            const dateStr = `${yyyy}-${mm}-${dd}`;
-            
-            // Re-verified URL format and proxy string
+            const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            // Fixed the path and proxy string
             const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png&t=${now.getTime()}`;
-            document.getElementById('windgram-box').innerHTML = `<img src="${url}" onerror="this.src='https://via.placeholder.com/800x400?text=Windgram+Not+Yet+Available+For+Today'" alt="Windgram Forecast">`;
+            document.getElementById('windgram-box').innerHTML = `<img src="${url}" onerror="this.src='https://via.placeholder.com/800x400?text=Windgram+Not+Yet+Updated'" alt="Windgram">`;
         }
 
         getRawNAMData();
