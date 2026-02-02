@@ -36,10 +36,10 @@
         
         h2 { font-size: 1.1rem; color: #333; margin-top: 0; margin-bottom: 10px; }
 
-        /* UNIVERSAL WINDOW BOX (Standard) */
+        /* STANDARD WINDOW (For FAA) */
         .content-window {
             width: 100%;
-            height: 580px; 
+            height: 480px; 
             position: relative;
             overflow: hidden;
             border-radius: 8px;
@@ -53,10 +53,10 @@
             border: none;
         }
 
-        /* XC SKIES SPECIAL ZOOM & SHIFT */
+        /* XC SKIES VIRTUAL DESKTOP FIX */
         .xc-window {
             width: 100%;
-            height: 600px; /* Taller window for map navigation */
+            height: 550px; 
             position: relative;
             overflow: hidden;
             border-radius: 8px;
@@ -66,17 +66,18 @@
 
         .xc-window iframe {
             position: absolute;
-            width: 180%; /* Creates a larger 'virtual' width to push menus off */
-            height: 180%;
+            /* Force desktop layout to enable better zoom/centering */
+            width: 300%; 
+            height: 200%;
             border: none;
             
-            /* Zoom & Origin: Scaled down to fit the card while hiding popups */
-            transform: scale(0.6); 
+            /* Scale shrinks it back down; origin pins it to the top-left */
+            transform: scale(0.5); 
             transform-origin: 0 0;
             
-            /* Pushes the 'Subscribe' popup to the left and top header out of view */
-            top: -40px; 
-            left: -480px; 
+            /* Pushes the login/subscribe popups off-screen and centers Peterson Butte */
+            top: -150px; 
+            left: -1150px; 
         }
 
         /* WINDGRAM BOX */
@@ -117,12 +118,12 @@
         <h2>XC Skies Forecast Map</h2>
         <div class="xc-window">
             <iframe 
-                src="https://www.xcskies.com/map?lat=44.5052&lon=-122.6322&zoom=12" 
+                src="https://www.xcskies.com/map?lat=44.5052&lon=-122.6322&zoom=11" 
                 scrolling="no" 
                 loading="lazy">
             </iframe>
         </div>
-        <p style="font-size: 0.7rem; color: #666; margin-top: 5px;">Map panned to hide popups; Zoomed on Peterson Butte</p>
+        <p style="font-size: 0.7rem; color: #666; margin-top: 5px;">Centered on Butte; Popups Hidden</p>
     </div>
 
     <div class="card">
@@ -130,7 +131,7 @@
         <div id="windgram-box">Loading...</div>
     </div>
 
-    <button class="refresh-btn" onclick="location.reload()">Refresh All Hub Data</button>
+    <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
 
     <script>
         function updateWindgram() {
@@ -140,6 +141,7 @@
             const dd = String(now.getDate()).padStart(2, '0');
             const dateStr = `${yyyy}-${mm}-${dd}`;
             
+            // Secure proxy to allow HTTP image on HTTPS site
             const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
             document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram Forecast">`;
         }
