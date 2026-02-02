@@ -11,7 +11,7 @@
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 850px; margin-bottom: 20px; text-align: center; overflow: hidden; }
         h2 { font-size: 1.2rem; color: #333; margin-top: 0; margin-bottom: 10px; }
         .camera-window { width: 100%; height: 590px; position: relative; overflow: hidden; border-radius: 8px; background: #000; touch-action: pan-y; }
-        .camera-window iframe { width: 100%; height: 100%; border: none; overflow: hidden; }
+        .camera-window iframe { width: 100%; height: 100%; border: none; }
         .table-container { overflow-x: auto; border-radius: 8px; border: 1px solid #ddd; margin-top: 10px; }
         table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; }
         th, td { padding: 12px 8px; border-bottom: 1px solid #eee; text-align: center; }
@@ -57,7 +57,7 @@
 
     <div class="card">
         <h2>Windgram Forecast</h2>
-        <div id="windgram-box">Loading...</div>
+        <div id="windgram-box">Loading today's forecast...</div>
     </div>
 
     <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
@@ -74,33 +74,37 @@
                 const data = await res.json();
                 const v = data.properties;
 
-                const now = new Date();
+                const nowUTC = new Date();
                 let html = "";
-                let count = 0;
-
-                // Find the first index that matches or is AFTER the current time
+                
+                // 1. Find the current hour's index
                 let startIndex = v.windSpeed.values.findIndex(entry => {
                     const entryTime = new Date(entry.validTime.split('/')[0]);
-                    return entryTime >= new Date(now.setMinutes(0,0,0));
+                    // Check if entry time is greater than or equal to current hour
+                    return entryTime >= new Date(nowUTC.setMinutes(0,0,0));
                 });
 
                 if (startIndex === -1) startIndex = 0;
 
-                for (let i = startIndex; i < startIndex + 10; i++) {
+                // 2. Loop through next 12 hours
+                for (let i = startIndex; i < startIndex + 12; i++) {
                     const entry = v.windSpeed.values[i];
                     if (!entry) break;
 
-                    const time = new Date(entry.validTime.split('/')[0]).toLocaleTimeString([], { hour: 'numeric', hour12: true });
+                    const timeLabel = new Date(entry.validTime.split('/')[0]).toLocaleTimeString([], { hour: 'numeric', hour12: true });
                     
-                    // CONVERSION: Raw data is m/s. m/s * 2.237 = mph
-                    const tempF = Math.round((v.temperature.values[i].value * 9/5) + 32);
-                    const speed = Math.round(v.windSpeed.values[i].value * 2.237);
-                    const gust = Math.round(v.windGust.values[i].value * 2.237);
+                    // CONVERSION: 19 units -> 6 mph means the raw data is km/h.
+                    // km/h * 0.621371 = mph
+                    const multiplier = 0.621371;
+                    
+                    const tempF = Math.round((v.temperature.values[i].value * 1.8) + 32);
+                    const speed = Math.round(v.windSpeed.values[i].value * multiplier);
+                    const gust = Math.round(v.windGust.values[i].value * multiplier);
                     const deg = v.windDirection.values[i].value;
                     const cardinal = getCardinal(deg);
 
                     html += `<tr>
-                        <td>${time}</td>
+                        <td>${timeLabel}</td>
                         <td>${tempF}°</td>
                         <td>${speed} mph</td>
                         <td class="gust">${gust} mph</td>
@@ -124,6 +128,8 @@
             const mm = String(now.getMonth() + 1).padStart(2, '0');
             const dd = String(now.getDate()).padStart(2, '0');
             const dateStr = `${yyyy}-${mm}-${dd}`;
+            
+            // RESTORED YOUR EXACT WORKING LOGIC
             const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
             document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram for ${dateStr}">`;
         }
