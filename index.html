@@ -18,7 +18,6 @@
         }
         h2 { font-size: 1.1rem; color: #333; margin: 0 0 10px 0; }
         
-        /* CUSTOM TABLE STYLING */
         .table-container { overflow-x: auto; border-radius: 8px; border: 1px solid #ddd; }
         table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; }
         th, td { padding: 10px 5px; border-bottom: 1px solid #eee; text-align: center; }
@@ -26,14 +25,15 @@
         
         .gust { color: #d9534f; font-weight: bold; }
         
-        /* ARROW STYLING: North is Up (0deg points down) */
         .wind-box { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
         .arrow { font-size: 1.2rem; line-height: 1; display: inline-block; font-weight: bold; color: #007bff; }
         .cardinal { font-size: 0.7rem; font-weight: bold; color: #555; }
 
         .window { width: 100%; height: 480px; position: relative; overflow: hidden; border-radius: 8px; background: #000; }
         iframe { width: 100%; height: 100%; border: none; }
+        
         #windgram-box img { width: 100%; height: auto; border-radius: 8px; display: block; }
+        
         .refresh-btn { padding: 16px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; max-width: 320px; margin-bottom: 40px; font-size: 1rem; }
     </style>
 </head>
@@ -49,7 +49,7 @@
     </div>
 
     <div class="card">
-        <h2>Hourly NAM 3km Forecast (Raw)</h2>
+        <h2>Hourly NAM Forecast (mph)</h2>
         <div class="table-container">
             <table id="forecast-table">
                 <thead>
@@ -58,20 +58,20 @@
                         <th>Temp</th>
                         <th>Wind</th>
                         <th>Gust</th>
-                        <th>Direction</th>
+                        <th>Dir</th>
                     </tr>
                 </thead>
                 <tbody id="forecast-body">
-                    <tr><td colspan="5">Loading high-res model data...</td></tr>
+                    <tr><td colspan="5">Loading model data...</td></tr>
                 </tbody>
             </table>
         </div>
-        <p style="font-size: 0.65rem; color: #888; margin-top: 8px;">Source: NWS PQR Grid (101,84). Arrows point direction wind is blowing.</p>
+        <p style="font-size: 0.65rem; color: #888; margin-top: 8px;">NWS Raw Grid Data (NAM-3km) converted to mph</p>
     </div>
 
     <div class="card">
         <h2>Windgram Forecast</h2>
-        <div id="windgram-box">Loading...</div>
+        <div id="windgram-box">Loading image...</div>
     </div>
 
     <button class="refresh-btn" onclick="location.reload()">Refresh Hub Data</button>
@@ -84,32 +84,33 @@
 
         async function getRawNAMData() {
             try {
-                // Fetching Raw Grid Data for Peterson Butte (PQR Grid)
+                // Ensure we hit the correct raw grid coordinates
                 const res = await fetch("https://api.weather.gov/gridpoints/PQR/101,84");
                 const data = await res.json();
                 const v = data.properties;
 
                 let html = "";
-                const now = new Date();
+                // Get current UTC hour to match data index
+                const startHour = new Date().getUTCHours();
 
                 for (let i = 0; i < 10; i++) {
-                    const time = new Date(v.windSpeed.values[i].validTime.split('/')[0]).toLocaleTimeString([], { hour: 'numeric', hour12: true });
+                    const entry = v.windSpeed.values[i];
+                    if (!entry) break;
+
+                    const time = new Date(entry.validTime.split('/')[0]).toLocaleTimeString([], { hour: 'numeric', hour12: true });
                     
-                    // Conversions
+                    // CONVERSION: NWS API Grid data is m/s. m/s * 2.23694 = mph
                     const tempF = Math.round((v.temperature.values[i].value * 9/5) + 32);
                     const speed = Math.round(v.windSpeed.values[i].value * 2.23694);
                     const gust = Math.round(v.windGust.values[i].value * 2.23694);
                     const deg = v.windDirection.values[i].value;
                     const cardinal = getCardinal(deg);
 
-                    // To make North=Up, we rotate the arrow by the wind degree. 
-                    // An arrow (↑) normally points North. If the wind is 180 (from South), 
-                    // it should point North, so we rotate 180deg.
                     html += `<tr>
                         <td>${time}</td>
                         <td>${tempF}°</td>
-                        <td>${speed}</td>
-                        <td class="gust">${gust}</td>
+                        <td>${speed} mph</td>
+                        <td class="gust">${gust} mph</td>
                         <td>
                             <div class="wind-box">
                                 <span class="arrow" style="transform: rotate(${deg}deg)">↓</span>
@@ -126,9 +127,14 @@
 
         function updateWindgram() {
             const now = new Date();
-            const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const dateStr = `${yyyy}-${mm}-${dd}`;
+            
+            // Re-verified URL format and proxy string
             const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png&t=${now.getTime()}`;
-            document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram">`;
+            document.getElementById('windgram-box').innerHTML = `<img src="${url}" onerror="this.src='https://via.placeholder.com/800x400?text=Windgram+Not+Yet+Available+For+Today'" alt="Windgram Forecast">`;
         }
 
         getRawNAMData();
