@@ -8,50 +8,104 @@
         * { box-sizing: border-box; }
         body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f2f5; padding: 10px; margin: 0; }
         h1 { font-size: 1.5rem; margin: 15px 0; color: #333; }
+        
+        /* CARD STYLING */
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 850px; margin-bottom: 20px; text-align: center; overflow: hidden; }
         h2 { font-size: 1.2rem; color: #333; margin-top: 0; margin-bottom: 10px; }
         
+        /* NEW WIND BANNER STYLES */
+        .wind-banner {
+            width: 100%;
+            overflow-x: auto;
+        }
+        .wind-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+        .wind-table th {
+            background: #343a40;
+            color: white;
+            padding: 10px 5px;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+        .wind-table td {
+            padding: 12px 8px;
+            border-bottom: 1px solid #eee;
+            text-align: center;
+            vertical-align: middle;
+        }
+        
+        /* Highlight the Primary Station (Peterson) */
+        .primary-row {
+            background-color: #e8f5e9; /* Light Green Background */
+            border-left: 4px solid #28a745;
+        }
+        .station-label {
+            font-weight: bold;
+            display: block;
+            color: #333;
+            text-align: left;
+        }
+        .sub-label {
+            font-size: 0.75rem;
+            color: #777;
+            display: block;
+            text-align: left;
+        }
+        
+        /* Wind Values */
+        .wind-val { font-weight: bold; color: #333; font-size: 1.1rem; }
+        .gust-val { color: #d9534f; font-weight: bold; font-size: 1.1rem; }
+        .unit { font-size: 0.7rem; color: #888; font-weight: normal; }
+        
+        /* Arrows */
+        .wind-arrow-box { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+        .arrow-icon { font-size: 1.4rem; color: #007bff; font-weight: bold; display: inline-block; }
+        .cardinal-text { font-size: 0.7rem; font-weight: bold; color: #555; margin-top: 2px; }
+
         /* Camera Styling */
         .camera-window { width: 100%; height: 590px; position: relative; overflow: hidden; border-radius: 8px; background: #000; touch-action: pan-y; }
         .camera-window iframe { width: 100%; height: 100%; border: none; }
         
-        /* CUSTOM LIVE DATA CARD STYLING (Peterson Butte) */
-        .live-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px; }
-        .data-box { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 15px 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .data-label { font-size: 0.75rem; color: #666; text-transform: uppercase; font-weight: bold; margin-bottom: 5px; }
-        .data-value { font-size: 2rem; font-weight: 800; color: #333; line-height: 1; }
-        .data-unit { font-size: 0.9rem; color: #888; font-weight: normal; margin-left: 2px; }
-        .val-gust { color: #d9534f; }
-        .val-dir { color: #007bff; }
-        .updated-time { font-size: 0.7rem; color: #999; margin-top: 15px; text-align: right; }
-
-        /* REGIONAL METAR TABLE STYLING */
-        .metar-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-        .metar-table th { background: #007bff; color: white; padding: 10px; font-size: 0.85rem; }
-        .metar-table td { padding: 10px; border-bottom: 1px solid #eee; font-size: 0.9rem; }
-        .metar-row:last-child td { border-bottom: none; }
-        .station-name { font-weight: bold; color: #333; }
-        .metar-gust { color: #d9534f; font-weight: bold; font-size: 0.85rem; }
-        .metar-age { font-size: 0.75rem; color: #999; display: block; margin-top: 2px; }
-
         /* Forecast Table Styling */
-        .table-container { overflow-x: auto; border-radius: 8px; border: 1px solid #ddd; margin-top: 10px; }
-        table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; }
-        th, td { padding: 12px 8px; border-bottom: 1px solid #eee; text-align: center; }
-        /* th rule is handled above generally, specific override if needed */
-        .wind-box { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-        .arrow { font-size: 1.2rem; line-height: 1; display: inline-block; font-weight: bold; color: #007bff; }
-        .cardinal { font-size: 0.7rem; font-weight: bold; color: #555; }
+        .forecast-container { overflow-x: auto; border-radius: 8px; border: 1px solid #ddd; margin-top: 10px; }
+        .forecast-table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; }
+        .forecast-table th { background: #343a40; color: white; }
+        .forecast-table td, .forecast-table th { padding: 10px; text-align: center; border-bottom: 1px solid #eee; }
         
-        /* Windgram Styling */
+        /* Windgram */
         #windgram-box img { width: 100%; height: auto; border-radius: 8px; display: block; }
         
         .refresh-btn { padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 40px; }
+        
+        .updated-time { font-size: 0.7rem; color: #999; margin-top: 5px; text-align: right; font-style: italic; }
     </style>
 </head>
 <body>
 
     <h1>Peterson Butte Hub</h1>
+
+    <div class="card">
+        <h2>Current Wind Conditions</h2>
+        <div class="wind-banner">
+            <table class="wind-table">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; padding-left:15px;">Station</th>
+                        <th>Speed</th>
+                        <th>Gust</th>
+                        <th>Dir</th>
+                    </tr>
+                </thead>
+                <tbody id="wind-banner-body">
+                    <tr><td colspan="4">Loading Wind Data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="updated-time" id="last-update">Updating...</div>
+    </div>
 
     <div class="card">
         <h2>Live FAA Webcam (West)</h2>
@@ -61,61 +115,9 @@
     </div>
 
     <div class="card">
-        <h2>Live Wind (Peterson Butte)</h2>
-        <div id="live-wind-card">
-            <div class="live-grid">
-                <div class="data-box">
-                    <span class="data-label">Wind Speed</span>
-                    <div>
-                        <span class="data-value" id="wu-speed">--</span>
-                        <span class="data-unit">mph</span>
-                    </div>
-                </div>
-
-                <div class="data-box">
-                    <span class="data-label">Wind Gust</span>
-                    <div>
-                        <span class="data-value val-gust" id="wu-gust">--</span>
-                        <span class="data-unit">mph</span>
-                    </div>
-                </div>
-
-                <div class="data-box" style="grid-column: span 2;">
-                    <span class="data-label">Direction</span>
-                    <div>
-                        <span class="data-value val-dir" id="wu-cardinal">--</span>
-                        <span class="data-unit" id="wu-deg" style="font-size: 1.2rem;">(--°)</span>
-                    </div>
-                </div>
-            </div>
-            <div class="updated-time" id="wu-time">Connecting...</div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>Regional Wind (METARs)</h2>
-        <div class="table-container">
-            <table class="metar-table">
-                <thead>
-                    <tr>
-                        <th>Station</th>
-                        <th>Wind</th>
-                        <th>Gust</th>
-                        <th>Dir</th>
-                    </tr>
-                </thead>
-                <tbody id="metar-body">
-                    <tr><td colspan="4">Fetching Synoptic Data...</td></tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="updated-time" id="metar-time"></div>
-    </div>
-
-    <div class="card">
         <h2>Hourly Point Forecast (NWS/HRRR)</h2>
-        <div class="table-container">
-            <table id="forecast-table">
+        <div class="forecast-container">
+            <table class="forecast-table" id="forecast-table">
                 <thead>
                     <tr>
                         <th>Time</th>
@@ -126,7 +128,7 @@
                     </tr>
                 </thead>
                 <tbody id="forecast-body">
-                    <tr><td colspan="5">Locating grid and loading forecast...</td></tr>
+                    <tr><td colspan="5">Loading forecast...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -134,7 +136,7 @@
 
     <div class="card">
         <h2>Windgram Forecast</h2>
-        <div id="windgram-box">Loading today's forecast...</div>
+        <div id="windgram-box">Loading...</div>
     </div>
 
     <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
@@ -146,205 +148,72 @@
         const LAT = 44.51;
         const LON = -122.968889;
         
-        // 1. PETERSON BUTTE (Wunderground)
-        const WU_STATION = 'KORBROWN23';
+        // API KEYS
         const WU_API_KEY = 'e1f10a1e78da46f5b10a1e78da96f525'; 
-
-        // 2. REGIONAL METARS (Synoptic)
-        // *** PASTE YOUR SYNOPTIC KEY BELOW ***
+        const WU_STATION = 'KORBROWN23';
+        
+        // *** PASTE YOUR SYNOPTIC TOKEN HERE ***
         const SYNOPTIC_TOKEN = 'bd6b13e22c96448f83932470cf8c5c07'; 
         const SYNOPTIC_STATIONS = 'KS12,KCVO,KSLE,KEUG';
 
-        // ==========================================
-        // FETCH 1: Peterson Butte Live (Wunderground)
-        // ==========================================
-        async function getLiveWind() {
-            const url = `https://api.weather.com/v2/pws/observations/current?stationId=${WU_STATION}&format=json&units=e&apiKey=${WU_API_KEY}&numericPrecision=decimal`;
-            try {
-                const res = await fetch(url);
-                if (!res.ok) throw new Error("Wunderground API Error");
-                const data = await res.json();
-                const obs = data.observations[0];
-                const imperial = obs.imperial;
-                const speed = imperial.windSpeed; 
-                const gust = imperial.windGust;   
-                const dir = obs.winddir;          
-                const timeStr = new Date(obs.obsTimeLocal).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
-
-                const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-                const cardIndex = Math.round(dir / 22.5) % 16;
-                const cardinal = cardinals[cardIndex];
-
-                document.getElementById('wu-speed').innerText = speed;
-                document.getElementById('wu-gust').innerText = gust;
-                document.getElementById('wu-deg').innerText = `(${dir}°)`;
-                document.getElementById('wu-cardinal').innerText = cardinal;
-                document.getElementById('wu-time').innerText = `Updated: ${timeStr}`;
-            } catch (err) {
-                console.error(err);
-                document.getElementById('wu-time').innerText = "Error loading live data.";
-            }
-        }
+        // Global store for data to combine them
+        let windData = {
+            peterson: null,
+            regional: []
+        };
 
         // ==========================================
-        // FETCH 2: Regional METARs (Synoptic)
+        // MASTER RENDER FUNCTION
         // ==========================================
-        async function getRegionalMetars() {
-            const tbody = document.getElementById('metar-body');
-            
-            if(SYNOPTIC_TOKEN.includes('PUT_YOUR') || !SYNOPTIC_TOKEN) {
-                tbody.innerHTML = '<tr><td colspan="4" style="color:red">Please add your Synoptic API Token to the script!</td></tr>';
-                return;
+        function renderWindTable() {
+            const tbody = document.getElementById('wind-banner-body');
+            let html = "";
+
+            // 1. Render Peterson Butte (Primary Row)
+            if (windData.peterson) {
+                const p = windData.peterson;
+                html += `
+                <tr class="primary-row">
+                    <td style="text-align:left;">
+                        <span class="station-label">Peterson Butte</span>
+                        <span class="sub-label">Live Sensor</span>
+                    </td>
+                    <td><span class="wind-val">${p.speed}</span> <span class="unit">mph</span></td>
+                    <td><span class="gust-val">${p.gust > p.speed ? p.gust : '-'}</span></td>
+                    <td>
+                        <div class="wind-arrow-box">
+                            <span class="arrow-icon" style="transform: rotate(${p.dir}deg)">↓</span>
+                            <span class="cardinal-text">${p.cardinal}</span>
+                        </div>
+                    </td>
+                </tr>`;
+            } else {
+                html += `<tr><td colspan="4">Loading Peterson Butte...</td></tr>`;
             }
 
-            // Synoptic API: Latest data for specific stations
-            // We request wind_speed, wind_direction, wind_gust
-            const url = `https://api.synopticdata.com/v2/stations/latest?token=${SYNOPTIC_TOKEN}&stid=${SYNOPTIC_STATIONS}&units=speed|mph,temp|f&vars=wind_speed,wind_direction,wind_gust`;
-
-            try {
-                const res = await fetch(url);
-                const json = await res.json();
-                
-                if(!json.STATION || json.STATION.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4">No station data found.</td></tr>';
-                    return;
-                }
-
-                let html = "";
-                
-                // Define Display Names map (optional, to make ID prettier)
-                const names = {
-                    "KS12": "Albany (S12)",
-                    "KCVO": "Corvallis",
-                    "KSLE": "Salem",
-                    "KEUG": "Eugene"
-                };
-
-                // Sort the stations to match the order we requested (optional, but nice)
-                // The API might return them in random order.
-                const stationOrder = ["KS12", "KCVO", "KSLE", "KEUG"];
-                const sortedStations = json.STATION.sort((a, b) => {
-                    return stationOrder.indexOf(a.STID) - stationOrder.indexOf(b.STID);
-                });
-
-                sortedStations.forEach(st => {
-                    // Safety checks if sensor data is missing
-                    const obs = st.OBSERVATIONS;
-                    const speed = obs.wind_speed_value_1 ? Math.round(obs.wind_speed_value_1.value) : 0;
-                    const dir = obs.wind_direction_value_1 ? Math.round(obs.wind_direction_value_1.value) : 0;
-                    const gust = obs.wind_gust_value_1 ? Math.round(obs.wind_gust_value_1.value) : 0;
-                    const time = new Date(obs.wind_speed_value_1 ? obs.wind_speed_value_1.date_time : new Date());
-                    
-                    // Calc age in minutes
-                    const now = new Date();
-                    const ageMins = Math.round((now - time) / 60000);
-                    
-                    // Cardinals
-                    const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-                    const cardStr = cardinals[Math.round(dir / 22.5) % 16];
-
-                    // Formatting
-                    const nameDisplay = names[st.STID] || st.STID;
-                    const gustDisplay = (gust > speed && gust > 0) ? `${gust}` : '-';
-                    
-                    html += `<tr class="metar-row">
-                        <td>
-                            <div class="station-name">${nameDisplay}</div>
-                            <span class="metar-age">${ageMins}m ago</span>
+            // 2. Render Regional Stations
+            if (windData.regional.length > 0) {
+                windData.regional.forEach(st => {
+                    const gustDisplay = (st.gust > st.speed && st.gust > 0) ? st.gust : '-';
+                    html += `
+                    <tr>
+                        <td style="text-align:left;">
+                            <span class="station-label">${st.name}</span>
+                            <span class="sub-label">${st.age}m ago</span>
                         </td>
-                        <td>${speed} <span style="font-size:0.7rem">mph</span></td>
-                        <td><span class="metar-gust">${gustDisplay}</span></td>
+                        <td><span class="wind-val">${st.speed}</span></td>
+                        <td><span class="gust-val">${gustDisplay}</span></td>
                         <td>
-                            <div class="wind-box">
-                                <span class="arrow" style="transform: rotate(${dir}deg); font-size:1rem;">↓</span>
-                                <span class="cardinal" style="font-size:0.65rem;">${cardStr}</span>
+                            <div class="wind-arrow-box">
+                                <span class="arrow-icon" style="transform: rotate(${st.dir}deg)">↓</span>
+                                <span class="cardinal-text">${st.cardinal}</span>
                             </div>
                         </td>
                     </tr>`;
                 });
-
-                tbody.innerHTML = html;
-                document.getElementById('metar-time').innerText = "Source: Synoptic / NWS";
-
-            } catch (err) {
-                console.error(err);
-                tbody.innerHTML = '<tr><td colspan="4">Error loading Synoptic data. Check Token.</td></tr>';
+            } else if (SYNOPTIC_TOKEN.includes('PUT_YOUR')) {
+                html += `<tr><td colspan="4" style="color:red; font-size:0.8rem;">Missing Synoptic API Token</td></tr>`;
             }
-        }
 
-        // ==========================================
-        // FETCH 3: HRRR FORECAST
-        // ==========================================
-        async function getHRRRForecast() {
-            const tableBody = document.getElementById('forecast-body');
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timeformat=iso8601&timezone=auto&forecast_days=1&models=hrrr_us`;
-
-            try {
-                const res = await fetch(url);
-                if (!res.ok) throw new Error("Open-Meteo API Error");
-                const data = await res.json();
-                const hourly = data.hourly;
-                let html = "";
-                const now = new Date();
-                let startIndex = 0;
-                
-                for (let i = 0; i < hourly.time.length; i++) {
-                    if (new Date(hourly.time[i]) >= now) {
-                        startIndex = i;
-                        break;
-                    }
-                }
-
-                for (let i = startIndex; i < startIndex + 12; i++) {
-                    if (!hourly.time[i]) break;
-                    const dateObj = new Date(hourly.time[i]);
-                    const timeLabel = dateObj.toLocaleTimeString([], { hour: 'numeric', hour12: true });
-                    const temp = Math.round(hourly.temperature_2m[i]);
-                    const speed = Math.round(hourly.wind_speed_10m[i]);
-                    const gust = Math.round(hourly.wind_gusts_10m[i]);
-                    const dir = hourly.wind_direction_10m[i];
-                    const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-                    const cardinalStr = cardinals[Math.round(dir / 22.5) % 16];
-                    const gustClass = (gust > speed + 5) ? "gust" : "";
-
-                    html += `<tr>
-                        <td>${timeLabel}</td>
-                        <td>${temp}°</td>
-                        <td>${speed} mph</td>
-                        <td class="${gustClass}">${gust} mph</td>
-                        <td>
-                            <div class="wind-box">
-                                <span class="arrow" style="transform: rotate(${dir}deg)">↓</span>
-                                <span class="cardinal">${cardinalStr}</span>
-                            </div>
-                        </td>
-                    </tr>`;
-                }
-                tableBody.innerHTML = html;
-            } catch (err) {
-                console.error(err);
-                tableBody.innerHTML = "<tr><td colspan='5'>Error loading HRRR data.</td></tr>";
-            }
-        }
-
-        // ==========================================
-        // FETCH 4: WINDGRAM
-        // ==========================================
-        function updateWindgram() {
-            const now = new Date();
-            const yyyy = now.getFullYear();
-            const mm = String(now.getMonth() + 1).padStart(2, '0');
-            const dd = String(now.getDate()).padStart(2, '0');
-            const dateStr = `${yyyy}-${mm}-${dd}`;
-            const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
-            document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram for ${dateStr}">`;
-        }
-
-        // Initialize All
-        getLiveWind();     
-        getRegionalMetars(); // <-- NEW FUNCTION
-        getHRRRForecast();
-        updateWindgram();
-    </script>
-</body>
-</html>
+            tbody.innerHTML = html;
+            document.getElementById('last-update').
