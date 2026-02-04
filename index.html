@@ -118,14 +118,14 @@
         const SYNOPTIC_TOKEN = 'bd6b13e22c96448f83932470cf8c5c07'; 
         const SYNOPTIC_STATIONS = 'KS12,KCVO,KSLE,KEUG';
 
-        // Store data globally so we can partial-render if one API fails
+        // Store data globally
         let windData = {
             peterson: { status: 'loading', data: null },
             regional: { status: 'loading', data: [] }
         };
 
         // ==========================================
-        // RENDER FUNCTION (Updates the Table)
+        // RENDER FUNCTION
         // ==========================================
         function renderWindTable() {
             const tbody = document.getElementById('wind-banner-body');
@@ -151,7 +151,7 @@
                     </td>
                 </tr>`;
             } else if (windData.peterson.status === 'error') {
-                html += `<tr class="primary-row"><td colspan="4" class="error-msg">Peterson Error: Check Adblock/Network</td></tr>`;
+                html += `<tr class="primary-row"><td colspan="4" class="error-msg">Peterson Error: Check Network</td></tr>`;
             } else {
                 html += `<tr class="primary-row"><td colspan="4">Loading Peterson Butte...</td></tr>`;
             }
@@ -159,7 +159,8 @@
             // --- 2. REGIONAL ROWS ---
             if (windData.regional.status === 'success' && windData.regional.data.length > 0) {
                 windData.regional.data.forEach(st => {
-                    const gustDisplay = (st.gust > st.speed && st.gust > 0) ? st.gust : '-';
+                    // Force gust to dash if 0 or undefined
+                    const gustDisplay = (st.gust > 0) ? st.gust : '-';
                     html += `
                     <tr>
                         <td style="text-align:left;">
@@ -215,11 +216,10 @@
                 console.error("Peterson Fetch Error", err);
                 windData.peterson.status = 'error';
             }
-            renderWindTable(); // Always render, even if error
+            renderWindTable(); 
         }
 
         async function fetchRegional() {
-            // CHECK FOR MISSING TOKEN
             if(SYNOPTIC_TOKEN.includes('PUT_YOUR') || !SYNOPTIC_TOKEN) {
                 windData.regional.status = 'missing_token';
                 renderWindTable();
@@ -240,11 +240,40 @@
 
                 const processedData = json.STATION.sort((a, b) => order.indexOf(a.STID) - order.indexOf(b.STID)).map(st => {
                     const obs = st.OBSERVATIONS;
-                    const speed = obs.wind_speed_value_1 ? Math.round(obs.wind_speed_value_1.value) : 0;
+                    
+                    // --- THE FIX: CHECK TIMESTAMP AGE ---
+                    const now = new Date();
+                    
+                    // 1. Wind Speed Logic
+                    let speed = 0;
+                    let speedTime = now;
+                    if(obs.wind_speed_value_1) {
+                        speed = Math.round(obs.wind_speed_value_1.value);
+                        speedTime = new Date(obs.wind_speed_value_1.date_time);
+                    }
+                    
+                    // 2. Gust Logic (With Staleness Check)
+                    let gust = 0;
+                    if(obs.wind_gust_value_1) {
+                        const gustVal = Math.round(obs.wind_gust_value_1.value);
+                        const gustTime = new Date(obs.wind_gust_value_1.date_time);
+                        
+                        // Age check: How much older is the gust than the wind reading?
+                        // If Gust is more than 20 mins older than Speed, ignore it.
+                        // (20 * 60 * 1000 = 1200000ms)
+                        const ageDiff = speedTime - gustTime;
+                        
+                        // Also check if the gust itself is super old relative to NOW (e.g. > 1 hour)
+                        const absoluteAge = now - gustTime;
+
+                        if (ageDiff < 1200000 && absoluteAge < 3600000) {
+                            // Valid recent gust
+                            if(gustVal > speed) gust = gustVal;
+                        }
+                    }
+
                     const dir = obs.wind_direction_value_1 ? Math.round(obs.wind_direction_value_1.value) : 0;
-                    const gust = obs.wind_gust_value_1 ? Math.round(obs.wind_gust_value_1.value) : 0;
-                    const time = new Date(obs.wind_speed_value_1 ? obs.wind_speed_value_1.date_time : new Date());
-                    const age = Math.round((new Date() - time) / 60000);
+                    const age = Math.round((now - speedTime) / 60000);
 
                     return {
                         name: names[st.STID] || st.STID,
@@ -262,11 +291,11 @@
                 console.error("Regional Fetch Error", err);
                 windData.regional.status = 'error';
             }
-            renderWindTable(); // Always render
+            renderWindTable();
         }
 
         // ==========================================
-        // FORECAST & WINDGRAM (Standard)
+        // FORECAST & WINDGRAM
         // ==========================================
         async function getHRRRForecast() {
             const tableBody = document.getElementById('forecast-body');
