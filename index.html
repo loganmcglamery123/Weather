@@ -15,30 +15,33 @@
         .camera-window { width: 100%; height: 590px; position: relative; overflow: hidden; border-radius: 8px; background: #000; touch-action: pan-y; }
         .camera-window iframe { width: 100%; height: 100%; border: none; }
         
-        /* SUPER CROP STYLING 
-           This creates a small "keyhole" view that only shows the top-left tile (Wind).
-        */
-        .ambient-crop-container { 
-            width: 100%;
-            max-width: 400px; /* Limits width to force mobile layout or cut off right-side tiles */
-            height: 400px;    /* Height of exactly one tile */
-            overflow: hidden; 
-            border-radius: 8px; 
-            border: 1px solid #eee; 
-            margin: 0 auto;   /* Centers the crop box */
-            position: relative;
+        /* WUNDERGROUND TILE STYLING */
+        .wu-sticker-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            padding: 10px;
+            background: #fafafa;
+            border-radius: 8px;
+            border: 1px solid #eee;
         }
-        
-        .ambient-crop-container iframe { 
-            width: 100%; 
-            height: 1000px; 
-            border: none; 
-            
-            /* ADJUSTMENT:
-               -195px pulls the page UP to hide the header and "Live Station" text.
-               If it cuts off too much, change to -150px.
-            */
-            margin-top: -10px; 
+        .wu-sticker-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            /* Optional: Add a subtle shadow to the sticker */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .wu-btn {
+            display: inline-block;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            color: #fff;
+            background-color: #007bff;
+            border-radius: 20px;
+            text-decoration: none;
+            font-weight: bold;
         }
 
         /* Forecast Table Styling */
@@ -69,13 +72,16 @@
     </div>
 
     <div class="card">
-        <h2>Live Wind</h2>
-        <div class="ambient-crop-container">
-            <iframe src="https://ambientweather.net/devices/public/9fb9de27fff0d5dd69d5c76e0d25fe84?embed=true" scrolling="no"></iframe>
+        <h2>Live Conditions (KORBROWN23)</h2>
+        <div class="wu-sticker-container">
+            <a href="https://www.wunderground.com/dashboard/pws/KORBROWN23" target="_blank">
+                <img src="https://wu-stickers.wunderground.com/cgi-bin/banner/ban/wxBanner?bannertype=pws250_clean&weatherstationcount=KORBROWN23" alt="Live Weather Sticker">
+            </a>
+            
+            <a class="wu-btn" href="https://www.wunderground.com/dashboard/pws/KORBROWN23" target="_blank">
+                View Full Graphs ↗
+            </a>
         </div>
-        <p style="font-size: 0.75rem; color: #777; margin-top: 5px;">
-            powered by <a target="_blank" href="https://ambientweather.net">Ambient Weather</a>
-        </p>
     </div>
 
     <div class="card">
@@ -112,8 +118,6 @@
     
             async function getHRRRForecast() {
                 const tableBody = document.getElementById('forecast-body');
-                
-                // OPEN-METEO API URL
                 const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timeformat=iso8601&timezone=auto&forecast_days=1&models=hrrr_us`;
     
                 try {
@@ -123,11 +127,9 @@
                     const data = await res.json();
                     const hourly = data.hourly;
                     let html = "";
-                    
                     const now = new Date();
                     let startIndex = 0;
                     
-                    // Scan for the first hour that is >= current hour
                     for (let i = 0; i < hourly.time.length; i++) {
                         if (new Date(hourly.time[i]) >= now) {
                             startIndex = i;
@@ -137,15 +139,12 @@
     
                     for (let i = startIndex; i < startIndex + 12; i++) {
                         if (!hourly.time[i]) break;
-    
                         const dateObj = new Date(hourly.time[i]);
                         const timeLabel = dateObj.toLocaleTimeString([], { hour: 'numeric', hour12: true });
-    
                         const temp = Math.round(hourly.temperature_2m[i]);
                         const speed = Math.round(hourly.wind_speed_10m[i]);
                         const gust = Math.round(hourly.wind_gusts_10m[i]);
                         const dir = hourly.wind_direction_10m[i];
-                        
                         const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
                         const cardinalStr = cardinals[Math.round(dir / 22.5) % 16];
                         const gustClass = (gust > speed + 5) ? "gust" : "";
@@ -164,7 +163,6 @@
                         </tr>`;
                     }
                     tableBody.innerHTML = html;
-    
                 } catch (err) {
                     console.error(err);
                     tableBody.innerHTML = "<tr><td colspan='5'>Error loading HRRR data.</td></tr>";
@@ -177,7 +175,6 @@
                 const mm = String(now.getMonth() + 1).padStart(2, '0');
                 const dd = String(now.getDate()).padStart(2, '0');
                 const dateStr = `${yyyy}-${mm}-${dd}`;
-                
                 const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
                 document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram for ${dateStr}">`;
             }
