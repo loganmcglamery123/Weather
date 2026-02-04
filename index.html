@@ -13,74 +13,35 @@
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 850px; margin-bottom: 20px; text-align: center; overflow: hidden; }
         h2 { font-size: 1.2rem; color: #333; margin-top: 0; margin-bottom: 10px; }
         
-        /* NEW WIND BANNER STYLES */
-        .wind-banner {
-            width: 100%;
-            overflow-x: auto;
-        }
-        .wind-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.95rem;
-        }
-        .wind-table th {
-            background: #343a40;
-            color: white;
-            padding: 10px 5px;
-            font-size: 0.85rem;
-            text-transform: uppercase;
-        }
-        .wind-table td {
-            padding: 12px 8px;
-            border-bottom: 1px solid #eee;
-            text-align: center;
-            vertical-align: middle;
-        }
+        /* WIND BANNER STYLES */
+        .wind-banner { width: 100%; overflow-x: auto; }
+        .wind-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+        .wind-table th { background: #343a40; color: white; padding: 10px 5px; font-size: 0.85rem; text-transform: uppercase; }
+        .wind-table td { padding: 12px 8px; border-bottom: 1px solid #eee; text-align: center; vertical-align: middle; }
         
-        /* Highlight the Primary Station (Peterson) */
-        .primary-row {
-            background-color: #e8f5e9; /* Light Green Background */
-            border-left: 4px solid #28a745;
-        }
-        .station-label {
-            font-weight: bold;
-            display: block;
-            color: #333;
-            text-align: left;
-        }
-        .sub-label {
-            font-size: 0.75rem;
-            color: #777;
-            display: block;
-            text-align: left;
-        }
-        
-        /* Wind Values */
+        .primary-row { background-color: #e8f5e9; border-left: 4px solid #28a745; }
+        .station-label { font-weight: bold; display: block; color: #333; text-align: left; }
+        .sub-label { font-size: 0.75rem; color: #777; display: block; text-align: left; }
         .wind-val { font-weight: bold; color: #333; font-size: 1.1rem; }
         .gust-val { color: #d9534f; font-weight: bold; font-size: 1.1rem; }
         .unit { font-size: 0.7rem; color: #888; font-weight: normal; }
         
-        /* Arrows */
         .wind-arrow-box { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
         .arrow-icon { font-size: 1.4rem; color: #007bff; font-weight: bold; display: inline-block; }
         .cardinal-text { font-size: 0.7rem; font-weight: bold; color: #555; margin-top: 2px; }
 
-        /* Camera Styling */
+        /* Forecast & Camera */
         .camera-window { width: 100%; height: 590px; position: relative; overflow: hidden; border-radius: 8px; background: #000; touch-action: pan-y; }
         .camera-window iframe { width: 100%; height: 100%; border: none; }
-        
-        /* Forecast Table Styling */
         .forecast-container { overflow-x: auto; border-radius: 8px; border: 1px solid #ddd; margin-top: 10px; }
         .forecast-table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; }
         .forecast-table th { background: #343a40; color: white; }
         .forecast-table td, .forecast-table th { padding: 10px; text-align: center; border-bottom: 1px solid #eee; }
         
-        /* Windgram */
         #windgram-box img { width: 100%; height: auto; border-radius: 8px; display: block; }
-        
         .refresh-btn { padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 40px; }
-        
         .updated-time { font-size: 0.7rem; color: #999; margin-top: 5px; text-align: right; font-style: italic; }
+        .error-msg { color: red; font-size: 0.8rem; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -100,11 +61,11 @@
                     </tr>
                 </thead>
                 <tbody id="wind-banner-body">
-                    <tr><td colspan="4">Loading Wind Data...</td></tr>
+                    <tr><td colspan="4">Initializing...</td></tr>
                 </tbody>
             </table>
         </div>
-        <div class="updated-time" id="last-update">Updating...</div>
+        <div class="updated-time" id="last-update">Waiting for data...</div>
     </div>
 
     <div class="card">
@@ -148,30 +109,32 @@
         const LAT = 44.51;
         const LON = -122.968889;
         
-        // API KEYS
+        // PETERSON BUTTE (Weather Underground)
         const WU_API_KEY = 'e1f10a1e78da46f5b10a1e78da96f525'; 
         const WU_STATION = 'KORBROWN23';
         
-        // *** PASTE YOUR SYNOPTIC TOKEN HERE ***
+        // REGIONAL AIRPORTS (Synoptic Data)
+        // *** IMPORTANT: PASTE YOUR KEY INSIDE THE QUOTES BELOW ***
         const SYNOPTIC_TOKEN = 'bd6b13e22c96448f83932470cf8c5c07'; 
         const SYNOPTIC_STATIONS = 'KS12,KCVO,KSLE,KEUG';
 
-        // Global store for data to combine them
+        // Store data globally so we can partial-render if one API fails
         let windData = {
-            peterson: null,
-            regional: []
+            peterson: { status: 'loading', data: null },
+            regional: { status: 'loading', data: [] }
         };
 
         // ==========================================
-        // MASTER RENDER FUNCTION
+        // RENDER FUNCTION (Updates the Table)
         // ==========================================
         function renderWindTable() {
             const tbody = document.getElementById('wind-banner-body');
             let html = "";
 
-            // 1. Render Peterson Butte (Primary Row)
-            if (windData.peterson) {
-                const p = windData.peterson;
+            // --- 1. PETERSON BUTTE ROW ---
+            if (windData.peterson.status === 'success' && windData.peterson.data) {
+                const p = windData.peterson.data;
+                const gustDisplay = (p.gust > p.speed) ? p.gust : '-';
                 html += `
                 <tr class="primary-row">
                     <td style="text-align:left;">
@@ -179,7 +142,7 @@
                         <span class="sub-label">Live Sensor</span>
                     </td>
                     <td><span class="wind-val">${p.speed}</span> <span class="unit">mph</span></td>
-                    <td><span class="gust-val">${p.gust > p.speed ? p.gust : '-'}</span></td>
+                    <td><span class="gust-val">${gustDisplay}</span></td>
                     <td>
                         <div class="wind-arrow-box">
                             <span class="arrow-icon" style="transform: rotate(${p.dir}deg)">↓</span>
@@ -187,13 +150,15 @@
                         </div>
                     </td>
                 </tr>`;
+            } else if (windData.peterson.status === 'error') {
+                html += `<tr class="primary-row"><td colspan="4" class="error-msg">Peterson Error: Check Adblock/Network</td></tr>`;
             } else {
-                html += `<tr><td colspan="4">Loading Peterson Butte...</td></tr>`;
+                html += `<tr class="primary-row"><td colspan="4">Loading Peterson Butte...</td></tr>`;
             }
 
-            // 2. Render Regional Stations
-            if (windData.regional.length > 0) {
-                windData.regional.forEach(st => {
+            // --- 2. REGIONAL ROWS ---
+            if (windData.regional.status === 'success' && windData.regional.data.length > 0) {
+                windData.regional.data.forEach(st => {
                     const gustDisplay = (st.gust > st.speed && st.gust > 0) ? st.gust : '-';
                     html += `
                     <tr>
@@ -211,9 +176,144 @@
                         </td>
                     </tr>`;
                 });
-            } else if (SYNOPTIC_TOKEN.includes('PUT_YOUR')) {
-                html += `<tr><td colspan="4" style="color:red; font-size:0.8rem;">Missing Synoptic API Token</td></tr>`;
+            } else if (windData.regional.status === 'missing_token') {
+                html += `<tr><td colspan="4" class="error-msg">Missing Synoptic API Token in Script!</td></tr>`;
+            } else if (windData.regional.status === 'error') {
+                html += `<tr><td colspan="4" class="error-msg">Regional Data Fetch Failed</td></tr>`;
+            } else {
+                html += `<tr><td colspan="4">Loading Airports...</td></tr>`;
             }
 
             tbody.innerHTML = html;
-            document.getElementById('last-update').
+            document.getElementById('last-update').innerText = "Last Update: " + new Date().toLocaleTimeString();
+        }
+
+        // ==========================================
+        // FETCHERS
+        // ==========================================
+        
+        async function fetchPeterson() {
+            const url = `https://api.weather.com/v2/pws/observations/current?stationId=${WU_STATION}&format=json&units=e&apiKey=${WU_API_KEY}&numericPrecision=decimal`;
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error("WU API Error");
+                const data = await res.json();
+                const obs = data.observations[0];
+                const dir = obs.winddir;
+                const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+                
+                windData.peterson = {
+                    status: 'success',
+                    data: {
+                        speed: obs.imperial.windSpeed,
+                        gust: obs.imperial.windGust,
+                        dir: dir,
+                        cardinal: cardinals[Math.round(dir / 22.5) % 16]
+                    }
+                };
+            } catch (err) {
+                console.error("Peterson Fetch Error", err);
+                windData.peterson.status = 'error';
+            }
+            renderWindTable(); // Always render, even if error
+        }
+
+        async function fetchRegional() {
+            // CHECK FOR MISSING TOKEN
+            if(SYNOPTIC_TOKEN.includes('PUT_YOUR') || !SYNOPTIC_TOKEN) {
+                windData.regional.status = 'missing_token';
+                renderWindTable();
+                return;
+            }
+
+            const url = `https://api.synopticdata.com/v2/stations/latest?token=${SYNOPTIC_TOKEN}&stid=${SYNOPTIC_STATIONS}&units=speed|mph,temp|f&vars=wind_speed,wind_direction,wind_gust`;
+            
+            try {
+                const res = await fetch(url);
+                const json = await res.json();
+                
+                if(!json.STATION) throw new Error("No Stations Found");
+
+                const names = { "KS12": "Albany", "KCVO": "Corvallis", "KSLE": "Salem", "KEUG": "Eugene" };
+                const order = ["KS12", "KCVO", "KSLE", "KEUG"];
+                const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+
+                const processedData = json.STATION.sort((a, b) => order.indexOf(a.STID) - order.indexOf(b.STID)).map(st => {
+                    const obs = st.OBSERVATIONS;
+                    const speed = obs.wind_speed_value_1 ? Math.round(obs.wind_speed_value_1.value) : 0;
+                    const dir = obs.wind_direction_value_1 ? Math.round(obs.wind_direction_value_1.value) : 0;
+                    const gust = obs.wind_gust_value_1 ? Math.round(obs.wind_gust_value_1.value) : 0;
+                    const time = new Date(obs.wind_speed_value_1 ? obs.wind_speed_value_1.date_time : new Date());
+                    const age = Math.round((new Date() - time) / 60000);
+
+                    return {
+                        name: names[st.STID] || st.STID,
+                        speed: speed,
+                        gust: gust,
+                        dir: dir,
+                        cardinal: cardinals[Math.round(dir / 22.5) % 16],
+                        age: age
+                    };
+                });
+                
+                windData.regional = { status: 'success', data: processedData };
+
+            } catch (err) {
+                console.error("Regional Fetch Error", err);
+                windData.regional.status = 'error';
+            }
+            renderWindTable(); // Always render
+        }
+
+        // ==========================================
+        // FORECAST & WINDGRAM (Standard)
+        // ==========================================
+        async function getHRRRForecast() {
+            const tableBody = document.getElementById('forecast-body');
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timeformat=iso8601&timezone=auto&forecast_days=1&models=hrrr_us`;
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                const hourly = data.hourly;
+                let html = "";
+                const now = new Date();
+                let startIndex = 0;
+                for (let i = 0; i < hourly.time.length; i++) {
+                    if (new Date(hourly.time[i]) >= now) { startIndex = i; break; }
+                }
+                for (let i = startIndex; i < startIndex + 12; i++) {
+                    if (!hourly.time[i]) break;
+                    const d = new Date(hourly.time[i]);
+                    const time = d.toLocaleTimeString([], { hour: 'numeric', hour12: true });
+                    const speed = Math.round(hourly.wind_speed_10m[i]);
+                    const gust = Math.round(hourly.wind_gusts_10m[i]);
+                    const dir = hourly.wind_direction_10m[i];
+                    const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+                    const card = cardinals[Math.round(dir / 22.5) % 16];
+                    const gClass = (gust > speed + 5) ? "color:#d9534f; font-weight:bold;" : "";
+                    html += `<tr><td>${time}</td><td>${Math.round(hourly.temperature_2m[i])}°</td><td>${speed} mph</td><td style="${gClass}">${gust} mph</td><td><div class="wind-arrow-box"><span class="arrow-icon" style="transform: rotate(${dir}deg); font-size:1.1rem;">↓</span><span class="cardinal-text" style="font-size:0.6rem;">${card}</span></div></td></tr>`;
+                }
+                tableBody.innerHTML = html;
+            } catch (err) { console.error(err); }
+        }
+
+        function updateWindgram() {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const dateStr = `${yyyy}-${mm}-${dd}`;
+            const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
+            document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram">`;
+        }
+
+        // INITIALIZE
+        fetchPeterson();
+        fetchRegional();
+        getHRRRForecast();
+        updateWindgram();
+        setInterval(() => { fetchPeterson(); fetchRegional(); }, 120000);
+
+    </script>
+</body>
+</html>
