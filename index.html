@@ -15,26 +15,30 @@
         .camera-window { width: 100%; height: 590px; position: relative; overflow: hidden; border-radius: 8px; background: #000; touch-action: pan-y; }
         .camera-window iframe { width: 100%; height: 100%; border: none; }
         
-        /* Ambient Smart Crop Styling 
-           This container hides the scrollbars and cuts off the top of the website
-           to focus on the data tiles.
+        /* SUPER CROP STYLING 
+           This creates a small "keyhole" view that only shows the top-left tile (Wind).
         */
         .ambient-crop-container { 
-            width: 100%; 
-            height: 600px; /* Adjust this to show more/less of the graphs */
+            width: 100%;
+            max-width: 450px; /* Limits width to force mobile layout or cut off right-side tiles */
+            height: 310px;    /* Height of exactly one tile */
             overflow: hidden; 
             border-radius: 8px; 
             border: 1px solid #eee; 
+            margin: 0 auto;   /* Centers the crop box */
             position: relative;
         }
         
         .ambient-crop-container iframe { 
             width: 100%; 
-            height: 1000px; /* Make internal page tall enough to load graphs */
+            height: 1000px; 
             border: none; 
             
-            /* TRICK: Shift the iframe UP to hide the Ambient Header/Map */
-            margin-top: -100px; 
+            /* ADJUSTMENT:
+               -195px pulls the page UP to hide the header and "Live Station" text.
+               If it cuts off too much, change to -150px.
+            */
+            margin-top: -195px; 
         }
 
         /* Forecast Table Styling */
@@ -65,12 +69,12 @@
     </div>
 
     <div class="card">
-        <h2>Live Station Data</h2>
+        <h2>Live Wind</h2>
         <div class="ambient-crop-container">
-            <iframe src="https://ambientweather.net/devices/public/9fb9de27fff0d5dd69d5c76e0d25fe84?embed=true" scrolling="yes"></iframe>
+            <iframe src="https://ambientweather.net/devices/public/9fb9de27fff0d5dd69d5c76e0d25fe84?embed=true" scrolling="no"></iframe>
         </div>
         <p style="font-size: 0.75rem; color: #777; margin-top: 5px;">
-            Scroll within box for history. Powered by <a target="_blank" href="https://ambientweather.net">Ambient Weather</a>
+            powered by <a target="_blank" href="https://ambientweather.net">Ambient Weather</a>
         </p>
     </div>
 
