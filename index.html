@@ -131,17 +131,20 @@
             const tbody = document.getElementById('wind-banner-body');
             let html = "";
 
-            // --- 1. PETERSON BUTTE ROW ---
+            // --- 1. PETERSON BUTTE ROW (RAW VALUES) ---
             if (windData.peterson.status === 'success' && windData.peterson.data) {
                 const p = windData.peterson.data;
-                const gustDisplay = (p.gust > p.speed) ? p.gust : '-';
+                // Use Raw Values directly. If undefined/null, show 0.
+                const speedDisplay = (p.speed !== null && p.speed !== undefined) ? p.speed : 0;
+                const gustDisplay = (p.gust !== null && p.gust !== undefined) ? p.gust : 0;
+                
                 html += `
                 <tr class="primary-row">
                     <td style="text-align:left;">
                         <span class="station-label">Peterson Butte</span>
                         <span class="sub-label">Live Sensor</span>
                     </td>
-                    <td><span class="wind-val">${p.speed}</span> <span class="unit">mph</span></td>
+                    <td><span class="wind-val">${speedDisplay}</span> <span class="unit">mph</span></td>
                     <td><span class="gust-val">${gustDisplay}</span></td>
                     <td>
                         <div class="wind-arrow-box">
@@ -156,10 +159,9 @@
                 html += `<tr class="primary-row"><td colspan="4">Loading Peterson Butte...</td></tr>`;
             }
 
-            // --- 2. REGIONAL ROWS ---
+            // --- 2. REGIONAL ROWS (SMART STALENESS FILTER) ---
             if (windData.regional.status === 'success' && windData.regional.data.length > 0) {
                 windData.regional.data.forEach(st => {
-                    // Force gust to dash if 0 or undefined
                     const gustDisplay = (st.gust > 0) ? st.gust : '-';
                     html += `
                     <tr>
@@ -240,8 +242,6 @@
 
                 const processedData = json.STATION.sort((a, b) => order.indexOf(a.STID) - order.indexOf(b.STID)).map(st => {
                     const obs = st.OBSERVATIONS;
-                    
-                    // --- THE FIX: CHECK TIMESTAMP AGE ---
                     const now = new Date();
                     
                     // 1. Wind Speed Logic
@@ -257,17 +257,10 @@
                     if(obs.wind_gust_value_1) {
                         const gustVal = Math.round(obs.wind_gust_value_1.value);
                         const gustTime = new Date(obs.wind_gust_value_1.date_time);
-                        
-                        // Age check: How much older is the gust than the wind reading?
-                        // If Gust is more than 20 mins older than Speed, ignore it.
-                        // (20 * 60 * 1000 = 1200000ms)
                         const ageDiff = speedTime - gustTime;
-                        
-                        // Also check if the gust itself is super old relative to NOW (e.g. > 1 hour)
                         const absoluteAge = now - gustTime;
 
                         if (ageDiff < 1200000 && absoluteAge < 3600000) {
-                            // Valid recent gust
                             if(gustVal > speed) gust = gustVal;
                         }
                     }
