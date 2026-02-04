@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Peterson Butte Hub</title>
-    <style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <style>
         * { box-sizing: border-box; }
         body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f2f5; padding: 10px; margin: 0; }
         h1 { font-size: 1.5rem; margin: 15px 0; color: #333; }
@@ -15,10 +15,14 @@
         .camera-window { width: 100%; height: 590px; position: relative; overflow: hidden; border-radius: 8px; background: #000; touch-action: pan-y; }
         .camera-window iframe { width: 100%; height: 100%; border: none; }
         
-        /* Ambient Weather Styling */
-        .ambient-window { width: 100%; height: 600px; overflow-y: auto; border-radius: 8px; border: 1px solid #eee; -webkit-overflow-scrolling: touch; }
-        .ambient-window iframe { width: 100%; height: 1200px; border: none; } /* Taller internal height to ensure graphs render */
-        .ambient-credit { font-size: 0.75rem; color: #777; margin-top: 5px; }
+        /* Custom Wind Tile Styling */
+        .wind-dashboard { display: flex; flex-direction: column; gap: 15px; }
+        .live-readout { display: flex; justify-content: space-around; align-items: center; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; }
+        .readout-box { text-align: center; }
+        .readout-val { font-size: 1.8rem; font-weight: bold; color: #333; }
+        .readout-label { font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+        .readout-sub { font-size: 0.9rem; color: #007bff; font-weight: bold; }
+        .chart-container { position: relative; height: 250px; width: 100%; }
 
         /* Forecast Table Styling */
         .table-container { overflow-x: auto; border-radius: 8px; border: 1px solid #ddd; margin-top: 10px; }
@@ -48,12 +52,33 @@
     </div>
 
     <div class="card">
-        <h2>Live Station Data</h2>
-        <div class="ambient-window">
-            <iframe src="https://ambientweather.net/devices/public/9fb9de27fff0d5dd69d5c76e0d25fe84?embed=true" scrolling="yes"></iframe>
+        <h2>Live Wind (Ambient Station)</h2>
+        
+        <div id="api-view" class="wind-dashboard">
+            <div class="live-readout">
+                <div class="readout-box">
+                    <div class="readout-label">Speed</div>
+                    <div class="readout-val" id="cur-speed">--</div>
+                    <div class="readout-sub">mph</div>
+                </div>
+                <div class="readout-box">
+                    <div class="readout-label">Direction</div>
+                    <div class="readout-val" id="cur-dir">--</div>
+                    <div class="readout-sub" id="cur-cardinal">--</div>
+                </div>
+                <div class="readout-box">
+                    <div class="readout-label">Gust</div>
+                    <div class="readout-val" id="cur-gust" style="color:#d9534f">--</div>
+                    <div class="readout-sub">mph</div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="windChart"></canvas>
+            </div>
+            <p style="font-size:0.7rem; color:#999;">Station ID: 9fb9de... (Peterson Butte)</p>
         </div>
-        <p class="ambient-credit">powered by <a target="_blank" href="https://ambientweather.net">Ambient Weather</a></p>
-    </div>
+
+        </div>
 
     <div class="card">
         <h2>Hourly Point Forecast (NWS/HRRR)</h2>
@@ -83,84 +108,179 @@
     <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
 
     <script>
-            // CONFIGURATION: Peterson Butte
-            const LAT = 44.51;
-            const LON = -122.968889;
-    
-            async function getHRRRForecast() {
-                const tableBody = document.getElementById('forecast-body');
+        // ==========================================
+        // CONFIGURATION
+        // ==========================================
+        const LAT = 44.51;
+        const LON = -122.968889;
+
+        // *** AMBIENT API KEYS ***
+        // If you own the station, get these from your Ambient Dashboard (Account > API Keys)
+        // If you DO NOT own the station, you cannot use the graph/API view. 
+        // In that case, use the "OPTION B" HTML block above.
+        const AMBIENT_API_KEY = 'PUT_YOUR_API_KEY_HERE'; 
+        const AMBIENT_APP_KEY = 'PUT_YOUR_APP_KEY_HERE'; 
+        const MAC_ADDRESS = 'YOUR_MAC_ADDRESS'; // You need the MAC address (XX:XX:XX:XX:XX:XX), not the public Hex ID.
+
+        // ==========================================
+        // 1. AMBIENT WEATHER FETCH (Custom Graph)
+        // ==========================================
+        async function loadAmbientData() {
+            // Check if user has entered keys
+            if(AMBIENT_API_KEY.includes('PUT_YOUR') || !AMBIENT_API_KEY) {
+                document.getElementById('api-view').innerHTML = '<p style="color:red; font-size:0.9rem;">To see the custom graph, you must add your Ambient API Key, App Key, and MAC Address to the script code.<br><br>Don\'t own the station? <a href="#" onclick="alert(\'Uncomment OPTION B in the HTML code to use the public iframe instead.\')">Use the fallback mode</a>.</p>';
+                return;
+            }
+
+            const url = `https://api.ambientweather.net/v1/devices/${MAC_ADDRESS}?apiKey=${AMBIENT_API_KEY}&applicationKey=${AMBIENT_APP_KEY}&limit=288`;
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
                 
-                // OPEN-METEO API URL
-                const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timeformat=iso8601&timezone=auto&forecast_days=1&models=hrrr_us`;
-    
-                try {
-                    const res = await fetch(url);
-                    if (!res.ok) throw new Error("Open-Meteo API Error");
-                    
-                    const data = await res.json();
-                    const hourly = data.hourly;
-                    let html = "";
-                    
-                    const now = new Date();
-                    let startIndex = 0;
-                    
-                    // Scan for the first hour that is >= current hour
-                    for (let i = 0; i < hourly.time.length; i++) {
-                        if (new Date(hourly.time[i]) >= now) {
-                            startIndex = i;
-                            break;
+                if(!data || data.length === 0) throw new Error("No data found");
+
+                // Get latest reading (index 0 is usually newest)
+                const current = data[0];
+                document.getElementById('cur-speed').innerText = current.windspeedmph;
+                document.getElementById('cur-gust').innerText = current.windgustmph;
+                document.getElementById('cur-dir').innerText = current.winddir + "°";
+                
+                // Helper for Cardinals
+                const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+                const cardIndex = Math.round(current.winddir / 22.5) % 16;
+                document.getElementById('cur-cardinal').innerText = cardinals[cardIndex];
+
+                // Prepare Chart Data (Reverse so old -> new)
+                const chartData = data.reverse(); 
+                const labels = chartData.map(d => new Date(d.date).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'}));
+                const speeds = chartData.map(d => d.windspeedmph);
+                const gusts = chartData.map(d => d.windgustmph);
+
+                // Draw Chart
+                const ctx = document.getElementById('windChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Gust (mph)',
+                                data: gusts,
+                                borderColor: '#d9534f',
+                                backgroundColor: 'rgba(217, 83, 79, 0.1)',
+                                borderWidth: 1,
+                                pointRadius: 0,
+                                fill: true
+                            },
+                            {
+                                label: 'Wind (mph)',
+                                data: speeds,
+                                borderColor: '#007bff',
+                                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                fill: true
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { intersect: false, mode: 'index' },
+                        plugins: { legend: { display: true } },
+                        scales: {
+                            x: { display: false }, // Hide x-axis labels to save space
+                            y: { beginAtZero: true }
                         }
                     }
-    
-                    for (let i = startIndex; i < startIndex + 12; i++) {
-                        if (!hourly.time[i]) break;
-    
-                        const dateObj = new Date(hourly.time[i]);
-                        const timeLabel = dateObj.toLocaleTimeString([], { hour: 'numeric', hour12: true });
-    
-                        const temp = Math.round(hourly.temperature_2m[i]);
-                        const speed = Math.round(hourly.wind_speed_10m[i]);
-                        const gust = Math.round(hourly.wind_gusts_10m[i]);
-                        const dir = hourly.wind_direction_10m[i];
-                        
-                        const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-                        const cardinalStr = cardinals[Math.round(dir / 22.5) % 16];
-                        const gustClass = (gust > speed + 5) ? "gust" : "";
-    
-                        html += `<tr>
-                            <td>${timeLabel}</td>
-                            <td>${temp}°</td>
-                            <td>${speed} mph</td>
-                            <td class="${gustClass}">${gust} mph</td>
-                            <td>
-                                <div class="wind-box">
-                                    <span class="arrow" style="transform: rotate(${dir}deg)">↓</span>
-                                    <span class="cardinal">${cardinalStr}</span>
-                                </div>
-                            </td>
-                        </tr>`;
-                    }
-                    tableBody.innerHTML = html;
-    
-                } catch (err) {
-                    console.error(err);
-                    tableBody.innerHTML = "<tr><td colspan='5'>Error loading HRRR data.</td></tr>";
-                }
+                });
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('api-view').innerHTML = "Error loading Ambient data. Check Keys.";
             }
-    
-            function updateWindgram() {
-                const now = new Date();
-                const yyyy = now.getFullYear();
-                const mm = String(now.getMonth() + 1).padStart(2, '0');
-                const dd = String(now.getDate()).padStart(2, '0');
-                const dateStr = `${yyyy}-${mm}-${dd}`;
+        }
+
+        // ==========================================
+        // 2. HRRR FORECAST (Open-Meteo)
+        // ==========================================
+        async function getHRRRForecast() {
+            const tableBody = document.getElementById('forecast-body');
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timeformat=iso8601&timezone=auto&forecast_days=1&models=hrrr_us`;
+
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error("Open-Meteo API Error");
                 
-                const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
-                document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram for ${dateStr}">`;
+                const data = await res.json();
+                const hourly = data.hourly;
+                let html = "";
+                const now = new Date();
+                let startIndex = 0;
+                
+                // Find start time
+                for (let i = 0; i < hourly.time.length; i++) {
+                    if (new Date(hourly.time[i]) >= now) {
+                        startIndex = i;
+                        break;
+                    }
+                }
+
+                for (let i = startIndex; i < startIndex + 12; i++) {
+                    if (!hourly.time[i]) break;
+
+                    const dateObj = new Date(hourly.time[i]);
+                    const timeLabel = dateObj.toLocaleTimeString([], { hour: 'numeric', hour12: true });
+
+                    const temp = Math.round(hourly.temperature_2m[i]);
+                    const speed = Math.round(hourly.wind_speed_10m[i]);
+                    const gust = Math.round(hourly.wind_gusts_10m[i]);
+                    const dir = hourly.wind_direction_10m[i];
+                    
+                    const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+                    const cardinalStr = cardinals[Math.round(dir / 22.5) % 16];
+                    const gustClass = (gust > speed + 5) ? "gust" : "";
+
+                    html += `<tr>
+                        <td>${timeLabel}</td>
+                        <td>${temp}°</td>
+                        <td>${speed} mph</td>
+                        <td class="${gustClass}">${gust} mph</td>
+                        <td>
+                            <div class="wind-box">
+                                <span class="arrow" style="transform: rotate(${dir}deg)">↓</span>
+                                <span class="cardinal">${cardinalStr}</span>
+                            </div>
+                        </td>
+                    </tr>`;
+                }
+                tableBody.innerHTML = html;
+
+            } catch (err) {
+                console.error(err);
+                tableBody.innerHTML = "<tr><td colspan='5'>Error loading HRRR data.</td></tr>";
             }
-    
-            getHRRRForecast();
-            updateWindgram();
+        }
+
+        // ==========================================
+        // 3. WINDGRAM
+        // ==========================================
+        function updateWindgram() {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const dateStr = `${yyyy}-${mm}-${dd}`;
+            
+            const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
+            document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram for ${dateStr}">`;
+        }
+
+        // Initialize
+        getHRRRForecast();
+        updateWindgram();
+        loadAmbientData(); // Try to load API data
     </script>
 </body>
 </html>
