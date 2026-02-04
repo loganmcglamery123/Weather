@@ -15,34 +15,33 @@
         .camera-window { width: 100%; height: 590px; position: relative; overflow: hidden; border-radius: 8px; background: #000; touch-action: pan-y; }
         .camera-window iframe { width: 100%; height: 100%; border: none; }
         
-        /* WUNDERGROUND TILE STYLING */
-        .wu-sticker-container {
+        /* CUSTOM LIVE DATA CARD STYLING */
+        .live-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* Two columns */
+            gap: 15px;
+            margin-top: 10px;
+        }
+        .data-box {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px 10px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 15px;
-            padding: 10px;
-            background: #fafafa;
-            border-radius: 8px;
-            border: 1px solid #eee;
+            justify-content: center;
         }
-        .wu-sticker-container img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 4px;
-            /* Optional: Add a subtle shadow to the sticker */
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-        .wu-btn {
-            display: inline-block;
-            padding: 8px 16px;
-            font-size: 0.85rem;
-            color: #fff;
-            background-color: #007bff;
-            border-radius: 20px;
-            text-decoration: none;
-            font-weight: bold;
-        }
+        .data-label { font-size: 0.75rem; color: #666; text-transform: uppercase; font-weight: bold; margin-bottom: 5px; }
+        .data-value { font-size: 2rem; font-weight: 800; color: #333; line-height: 1; }
+        .data-unit { font-size: 0.9rem; color: #888; font-weight: normal; margin-left: 2px; }
+        
+        /* Special Colors */
+        .val-gust { color: #d9534f; } /* Red for Gusts */
+        .val-dir { color: #007bff; }  /* Blue for Direction */
+        
+        /* Last Updated Text */
+        .updated-time { font-size: 0.7rem; color: #999; margin-top: 15px; text-align: right; }
 
         /* Forecast Table Styling */
         .table-container { overflow-x: auto; border-radius: 8px; border: 1px solid #ddd; margin-top: 10px; }
@@ -72,15 +71,35 @@
     </div>
 
     <div class="card">
-        <h2>Live Conditions (KORBROWN23)</h2>
-        <div class="wu-sticker-container">
-            <a href="https://www.wunderground.com/dashboard/pws/KORBROWN23" target="_blank">
-                <img src="https://wu-stickers.wunderground.com/cgi-bin/banner/ban/wxBanner?bannertype=pws250_clean&weatherstationcount=KORBROWN23" alt="Live Weather Sticker">
-            </a>
-            
-            <a class="wu-btn" href="https://www.wunderground.com/dashboard/pws/KORBROWN23" target="_blank">
-                View Full Graphs ↗
-            </a>
+        <h2>Live Wind (KORBROWN23)</h2>
+        
+        <div id="live-wind-card">
+            <div class="live-grid">
+                <div class="data-box">
+                    <span class="data-label">Wind Speed</span>
+                    <div>
+                        <span class="data-value" id="wu-speed">--</span>
+                        <span class="data-unit">mph</span>
+                    </div>
+                </div>
+
+                <div class="data-box">
+                    <span class="data-label">Wind Gust</span>
+                    <div>
+                        <span class="data-value val-gust" id="wu-gust">--</span>
+                        <span class="data-unit">mph</span>
+                    </div>
+                </div>
+
+                <div class="data-box" style="grid-column: span 2;">
+                    <span class="data-label">Direction</span>
+                    <div>
+                        <span class="data-value val-dir" id="wu-cardinal">--</span>
+                        <span class="data-unit" id="wu-deg" style="font-size: 1.2rem;">(--°)</span>
+                    </div>
+                </div>
+            </div>
+            <div class="updated-time" id="wu-time">Connecting...</div>
         </div>
     </div>
 
@@ -112,75 +131,130 @@
     <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
 
     <script>
-            // CONFIGURATION: Peterson Butte
-            const LAT = 44.51;
-            const LON = -122.968889;
-    
-            async function getHRRRForecast() {
-                const tableBody = document.getElementById('forecast-body');
-                const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timeformat=iso8601&timezone=auto&forecast_days=1&models=hrrr_us`;
-    
-                try {
-                    const res = await fetch(url);
-                    if (!res.ok) throw new Error("Open-Meteo API Error");
-                    
-                    const data = await res.json();
-                    const hourly = data.hourly;
-                    let html = "";
-                    const now = new Date();
-                    let startIndex = 0;
-                    
-                    for (let i = 0; i < hourly.time.length; i++) {
-                        if (new Date(hourly.time[i]) >= now) {
-                            startIndex = i;
-                            break;
-                        }
-                    }
-    
-                    for (let i = startIndex; i < startIndex + 12; i++) {
-                        if (!hourly.time[i]) break;
-                        const dateObj = new Date(hourly.time[i]);
-                        const timeLabel = dateObj.toLocaleTimeString([], { hour: 'numeric', hour12: true });
-                        const temp = Math.round(hourly.temperature_2m[i]);
-                        const speed = Math.round(hourly.wind_speed_10m[i]);
-                        const gust = Math.round(hourly.wind_gusts_10m[i]);
-                        const dir = hourly.wind_direction_10m[i];
-                        const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-                        const cardinalStr = cardinals[Math.round(dir / 22.5) % 16];
-                        const gustClass = (gust > speed + 5) ? "gust" : "";
-    
-                        html += `<tr>
-                            <td>${timeLabel}</td>
-                            <td>${temp}°</td>
-                            <td>${speed} mph</td>
-                            <td class="${gustClass}">${gust} mph</td>
-                            <td>
-                                <div class="wind-box">
-                                    <span class="arrow" style="transform: rotate(${dir}deg)">↓</span>
-                                    <span class="cardinal">${cardinalStr}</span>
-                                </div>
-                            </td>
-                        </tr>`;
-                    }
-                    tableBody.innerHTML = html;
-                } catch (err) {
-                    console.error(err);
-                    tableBody.innerHTML = "<tr><td colspan='5'>Error loading HRRR data.</td></tr>";
-                }
+        // CONFIGURATION
+        const LAT = 44.51;
+        const LON = -122.968889;
+        const WU_STATION = 'KORBROWN23';
+        // This is a common public API key used by the Wunderground website itself. 
+        // It allows us to get JSON data without an account.
+        const WU_API_KEY = 'e1f10a1e78da46f5b10a1e78da96f525'; 
+
+        // ==========================================
+        // 1. LIVE DATA FETCH (Weather Underground)
+        // ==========================================
+        async function getLiveWind() {
+            // The magic endpoint that returns JSON
+            const url = `https://api.weather.com/v2/pws/observations/current?stationId=${WU_STATION}&format=json&units=e&apiKey=${WU_API_KEY}&numericPrecision=decimal`;
+
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error("Wunderground API Error");
+
+                const data = await res.json();
+                
+                // Navigate the JSON structure to get the data
+                // Structure is usually: data.observations[0].imperial...
+                const obs = data.observations[0];
+                const imperial = obs.imperial;
+                
+                // Get Values
+                const speed = imperial.windSpeed; // already in mph
+                const gust = imperial.windGust;   // already in mph
+                const dir = obs.winddir;          // degrees
+                const timeStr = new Date(obs.obsTimeLocal).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
+
+                // Calculate Cardinal Direction
+                const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+                const cardIndex = Math.round(dir / 22.5) % 16;
+                const cardinal = cardinals[cardIndex];
+
+                // --- UPDATE THE DOM ---
+                document.getElementById('wu-speed').innerText = speed;
+                document.getElementById('wu-gust').innerText = gust;
+                document.getElementById('wu-deg').innerText = `(${dir}°)`;
+                document.getElementById('wu-cardinal').innerText = cardinal;
+                document.getElementById('wu-time').innerText = `Updated: ${timeStr}`;
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('wu-time').innerText = "Error loading live data.";
+                document.getElementById('wu-time').style.color = "red";
             }
-    
-            function updateWindgram() {
+        }
+
+        // ==========================================
+        // 2. HRRR FORECAST
+        // ==========================================
+        async function getHRRRForecast() {
+            const tableBody = document.getElementById('forecast-body');
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timeformat=iso8601&timezone=auto&forecast_days=1&models=hrrr_us`;
+
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error("Open-Meteo API Error");
+                
+                const data = await res.json();
+                const hourly = data.hourly;
+                let html = "";
                 const now = new Date();
-                const yyyy = now.getFullYear();
-                const mm = String(now.getMonth() + 1).padStart(2, '0');
-                const dd = String(now.getDate()).padStart(2, '0');
-                const dateStr = `${yyyy}-${mm}-${dd}`;
-                const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
-                document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram for ${dateStr}">`;
+                let startIndex = 0;
+                
+                for (let i = 0; i < hourly.time.length; i++) {
+                    if (new Date(hourly.time[i]) >= now) {
+                        startIndex = i;
+                        break;
+                    }
+                }
+
+                for (let i = startIndex; i < startIndex + 12; i++) {
+                    if (!hourly.time[i]) break;
+                    const dateObj = new Date(hourly.time[i]);
+                    const timeLabel = dateObj.toLocaleTimeString([], { hour: 'numeric', hour12: true });
+                    const temp = Math.round(hourly.temperature_2m[i]);
+                    const speed = Math.round(hourly.wind_speed_10m[i]);
+                    const gust = Math.round(hourly.wind_gusts_10m[i]);
+                    const dir = hourly.wind_direction_10m[i];
+                    const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+                    const cardinalStr = cardinals[Math.round(dir / 22.5) % 16];
+                    const gustClass = (gust > speed + 5) ? "gust" : "";
+
+                    html += `<tr>
+                        <td>${timeLabel}</td>
+                        <td>${temp}°</td>
+                        <td>${speed} mph</td>
+                        <td class="${gustClass}">${gust} mph</td>
+                        <td>
+                            <div class="wind-box">
+                                <span class="arrow" style="transform: rotate(${dir}deg)">↓</span>
+                                <span class="cardinal">${cardinalStr}</span>
+                            </div>
+                        </td>
+                    </tr>`;
+                }
+                tableBody.innerHTML = html;
+            } catch (err) {
+                console.error(err);
+                tableBody.innerHTML = "<tr><td colspan='5'>Error loading HRRR data.</td></tr>";
             }
-    
-            getHRRRForecast();
-            updateWindgram();
+        }
+
+        // ==========================================
+        // 3. WINDGRAM
+        // ==========================================
+        function updateWindgram() {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const dateStr = `${yyyy}-${mm}-${dd}`;
+            const url = `https://images.weserv.nl/?url=wxtofly.net/windgrams/${dateStr}_Peterson_Butte_windgram.png`;
+            document.getElementById('windgram-box').innerHTML = `<img src="${url}" alt="Windgram for ${dateStr}">`;
+        }
+
+        // Initialize All
+        getLiveWind();     // <-- Fetches your raw Wunderground data
+        getHRRRForecast();
+        updateWindgram();
     </script>
 </body>
 </html>
