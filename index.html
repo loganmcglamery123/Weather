@@ -64,7 +64,7 @@
     </div>
 
     <div class="card">
-        <h2>80m Wind Ensemble (Next 3 Days)</h2>
+        [cite_start]<h2>80m Wind Ensemble (Next 3 Days) [cite: 340]</h2>
         <div class="scroll-container">
             <table class="wind-table">
                 <thead>
@@ -75,25 +75,25 @@
                     </tr>
                 </thead>
                 <tbody id="ensemble-body">
-                    <tr><td colspan="3">Loading ensemble data...</td></tr>
+                    <tr><td colspan="3">Loading Meteoblue Ensemble...</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 
     <div class="card">
-        <h2>Wind Forecast (Next 24h)</h2>
+        [cite_start]<h2>High-Res Wind (Next 24h) [cite: 18]</h2>
         <div class="scroll-container">
             <table class="wind-table">
                 <thead>
                     <tr>
-                        <th style="text-align:left; padding-left:15px;">Time</th>
+                        <th style="text-align:left; padding-left:15px;">Time (5m)</th>
                         <th>Speed (mph)</th>
                         <th>Direction</th>
                     </tr>
                 </thead>
                 <tbody id="highres-body">
-                    <tr><td colspan="3">Loading forecast data...</td></tr>
+                    <tr><td colspan="3">Loading Meteoblue 5min Data...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -119,12 +119,11 @@
 
     <script>
         // === LOCATION CONFIGURATION ===
-        // Strictly set to Peterson Butte coordinates
         const LAT = 44.510000;
         const LON = -122.968889;
-        const METEOBLUE_KEY = 'WvHX7n5xTDOKo02y';
         
-        // Station IDs
+        // KEYS
+        const METEOBLUE_KEY = 'WvHX7n5xTDOKo02y';
         const WU_API_KEY = 'e1f10a1e78da46f5b10a1e78da96f525'; 
         const WU_STATION = 'KORBROWN23';
         const SYNOPTIC_TOKEN = 'bd6b13e22c96448f83932470cf8c5c07'; 
@@ -195,80 +194,78 @@
             renderWindTable();
         }
 
-        // --- 3. 80m ENSEMBLE (Meteoblue) ---
-        async function fetchWindEnsemble() {
-            // Updated to use the hardcoded LAT/LON constants
-            const url = `https://my.meteoblue.com/packages/wind80ensemble-1h?lat=${LAT}&lon=${LON}&asl=440&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=3`;
+        // --- 3. 80m ENSEMBLE (METEOBLUE) ---
+        [cite_start]// Docs: wind80ensemble-1h [cite: 340, 343]
+        async function fetchEnsemble() {
+            const url = `https://my.meteoblue.com/packages/wind80ensemble-1h?lat=${LAT}&lon=${LON}&asl=440&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=3&format=json`;
             try {
                 const res = await fetch(url);
-                if (res.status === 403) throw new Error("API Key Restricted (403)");
                 if (!res.ok) throw new Error(`API Error ${res.status}`);
-
                 const data = await res.json();
+                
+                // Debug: Log data to see exact keys
+                console.log("Ensemble API Response:", data);
+
                 const ensemble = data.data_1h;
-                if (!ensemble) throw new Error("No 1h Data in Response");
+                if (!ensemble) throw new Error("No 'data_1h' object found");
+
+                // Handling Variable Naming Variations based on Source 348
+                // Check for 'windspeed80m_consensus' OR 'windspeed_80m_consensus'
+                const consensus = ensemble.windspeed80m_consensus || ensemble.windspeed_80m_consensus || ensemble.windspeed_consensus;
+                const p90 = ensemble.windspeed80m_p90_exceedence || ensemble.windspeed_80m_p90_exceedence || ensemble.windspeed80m_p90;
+
+                if (!consensus) throw new Error("Consensus Data Missing");
 
                 let html = "";
-                // Attempt to read consensus and P90 keys (handling potential key naming variations)
-                const speeds = ensemble.windspeed_80m_consensus || ensemble.windspeed80m_consensus; 
-                const gusts = ensemble.windspeed_80m_p90_exceedence || ensemble.windspeed_80m_p90 || ensemble.windspeed80m_p90; 
-
-                if (!speeds) throw new Error("Data Keys Missing");
-
-                for(let i=0; i < speeds.length && i < 72; i++) {
+                for(let i=0; i < consensus.length && i < 72; i++) {
                     const time = new Date(ensemble.time[i]);
+                    // Only show future or recent past
+                    if(i > 0 && time < new Date(new Date().getTime() - 3600000)) continue;
+
                     html += `<tr>
                         <td style="text-align:left; padding-left:15px;">
                             <span class="station-label">${time.toLocaleDateString([], {weekday: 'short'})}</span>
                             <span class="sub-label">${time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                         </td>
-                        <td><span class="wind-val">${Math.round(speeds[i])}</span> <span class="unit">mph</span></td>
-                        <td><span class="gust-val">${Math.round(gusts ? gusts[i] : 0)}</span></td>
+                        <td><span class="wind-val">${Math.round(consensus[i])}</span> <span class="unit">mph</span></td>
+                        <td><span class="gust-val">${p90 ? Math.round(p90[i]) : '-'}</span></td>
                     </tr>`;
                 }
                 document.getElementById('ensemble-body').innerHTML = html;
             } catch (err) {
                 console.error("Ensemble Fetch Error:", err);
-                // Fallback message if 80m is not available on this key
-                document.getElementById('ensemble-body').innerHTML = `<tr><td colspan="3" class="error-msg">${err.message}</td></tr>`;
+                document.getElementById('ensemble-body').innerHTML = `<tr><td colspan="3" class="error-msg">Ensemble Error: ${err.message}</td></tr>`;
             }
         }
 
-        // --- 4. WIND FORECAST (Meteoblue) ---
-        // Tries 5min first, falls back to 1h if 5min is restricted
+        // --- 4. HIGH RES 5-MIN (METEOBLUE) ---
+        [cite_start]// Docs: basic-5min [cite: 18, 780, 785]
         async function fetchHighResWind() {
-            // 1. Attempt 5-minute Data
-            let url = `https://my.meteoblue.com/packages/basic-5min?lat=${LAT}&lon=${LON}&asl=440&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=1`;
-            let intervalLabel = "5m";
-
+            const url = `https://my.meteoblue.com/packages/basic-5min?lat=${LAT}&lon=${LON}&asl=440&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=1&format=json`;
             try {
-                let res = await fetch(url);
-                
-                // 2. FALLBACK: If 5min fails (403 Forbidden), switch to 1h standard package
-                if (res.status === 403 || res.status === 400) {
-                    console.warn("5min data blocked, falling back to 1h...");
-                    url = `https://my.meteoblue.com/packages/basic-1h?lat=${LAT}&lon=${LON}&asl=440&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=1`;
-                    res = await fetch(url);
-                    intervalLabel = "1h";
-                }
-
+                const res = await fetch(url);
                 if (!res.ok) throw new Error(`API Error ${res.status}`);
-                
                 const data = await res.json();
                 
-                // Check which data block was returned
-                const weatherData = data.data_5min || data.data_1h;
-                if (!weatherData) throw new Error("No Weather Data Found");
+                console.log("HighRes API Response:", data);
+
+                // Source 785: "data_xmin" -> "data_5min"
+                const hr = data.data_5min;
+                
+                if (!hr) throw new Error("No 'data_5min' object found");
 
                 let html = "";
-                for(let i=0; i < weatherData.time.length; i++) {
-                    const timeStr = weatherData.time[i].split(' ')[1]; // Get HH:MM
-                    const speed = weatherData.windspeed[i];
-                    const dir = weatherData.winddirection[i];
+                for(let i=0; i < hr.time.length; i++) {
+                     // Check 'windspeed' keys, sometimes just 'windspeed' in basic package
+                    const speed = hr.windspeed[i];
+                    const dir = hr.winddirection[i];
+                    
+                    // Simple logic to skip old data (optional, keeping last hour)
+                    // const timeStr = hr.time[i]; // "YYYY-MM-DD HH:MM"
 
                     html += `<tr>
                         <td style="text-align:left; padding-left:15px;">
-                            <span class="sub-label">${timeStr} <span style="font-size:0.6rem">(${intervalLabel})</span></span>
+                            <span class="sub-label">${hr.time[i].split(' ')[1]}</span>
                         </td>
                         <td><span class="wind-val">${Math.round(speed)}</span></td>
                         <td>
@@ -280,8 +277,8 @@
                 }
                 document.getElementById('highres-body').innerHTML = html;
             } catch (err) {
-                console.error("Forecast Fetch Error:", err);
-                document.getElementById('highres-body').innerHTML = `<tr><td colspan="3" class="error-msg">${err.message}</td></tr>`;
+                console.error("High Res Error:", err);
+                document.getElementById('highres-body').innerHTML = `<tr><td colspan="3" class="error-msg">High-Res Error: ${err.message}</td></tr>`;
             }
         }
 
@@ -305,12 +302,12 @@
         // INITIALIZE
         fetchPeterson();
         fetchRegional();
-        fetchWindEnsemble();
+        fetchEnsemble();
         fetchHighResWind();
         
         // REFRESH INTERVALS
         setInterval(() => { fetchPeterson(); fetchRegional(); }, 120000); 
-        setInterval(() => { fetchWindEnsemble(); fetchHighResWind(); }, 900000); 
+        setInterval(() => { fetchEnsemble(); fetchHighResWind(); }, 900000); 
     </script>
 </body>
 </html>
