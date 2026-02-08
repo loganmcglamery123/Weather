@@ -82,18 +82,18 @@
     </div>
 
     <div class="card">
-        <h2>High-Res Wind Forecast (Next 24h)</h2>
+        <h2>Wind Forecast (Next 24h)</h2>
         <div class="scroll-container">
             <table class="wind-table">
                 <thead>
                     <tr>
-                        <th style="text-align:left; padding-left:15px;">Time (5m)</th>
+                        <th style="text-align:left; padding-left:15px;">Time</th>
                         <th>Speed (mph)</th>
                         <th>Direction</th>
                     </tr>
                 </thead>
                 <tbody id="highres-body">
-                    <tr><td colspan="3">Loading high-res data...</td></tr>
+                    <tr><td colspan="3">Loading forecast data...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -120,7 +120,7 @@
     <script>
         const LAT = 44.51;
         const LON = -122.968889;
-        const API_KEY = 'WvHX7n5xTDOKo02y';
+        const METEOBLUE_KEY = 'WvHX7n5xTDOKo02y';
         
         const WU_API_KEY = 'e1f10a1e78da46f5b10a1e78da96f525'; 
         const WU_STATION = 'KORBROWN23';
@@ -132,11 +132,12 @@
             regional: { status: 'loading', data: [] }
         };
 
-        // --- FETCH CURRENT CONDITIONS ---
+        // --- 1. LIVE SENSOR DATA (WU) ---
         async function fetchPeterson() {
             const url = `https://api.weather.com/v2/pws/observations/current?stationId=${WU_STATION}&format=json&units=e&apiKey=${WU_API_KEY}&numericPrecision=decimal`;
             try {
                 const res = await fetch(url);
+                if(!res.ok) throw new Error("WU API Failed");
                 const data = await res.json();
                 const obs = data.observations[0];
                 const dir = obs.winddir;
@@ -150,15 +151,22 @@
                         cardinal: cardinals[Math.round(dir / 22.5) % 16]
                     }
                 };
-            } catch (err) { windData.peterson.status = 'error'; }
+            } catch (err) { 
+                console.error("Peterson Error:", err);
+                windData.peterson.status = 'error'; 
+            }
             renderWindTable(); 
         }
 
+        // --- 2. REGIONAL AIRPORTS (Synoptic) ---
         async function fetchRegional() {
             const url = `https://api.synopticdata.com/v2/stations/latest?token=${SYNOPTIC_TOKEN}&stid=${SYNOPTIC_STATIONS}&units=speed|mph,temp|f&vars=wind_speed,wind_direction,wind_gust`;
             try {
                 const res = await fetch(url);
+                if(!res.ok) throw new Error("Synoptic API Failed");
                 const json = await res.json();
+                if(!json.STATION) throw new Error("No Stations");
+
                 const names = { "KS12": "Albany", "KCVO": "Corvallis", "KSLE": "Salem", "KEUG": "Eugene" };
                 const order = ["KS12", "KCVO", "KSLE", "KEUG"];
                 const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -177,59 +185,105 @@
                     };
                 });
                 windData.regional = { status: 'success', data: processedData };
-            } catch (err) { windData.regional.status = 'error'; }
+            } catch (err) { 
+                console.error("Regional Error:", err);
+                windData.regional.status = 'error'; 
+            }
             renderWindTable();
         }
 
-        // --- NEW: FETCH 80m ENSEMBLE (3 DAYS) ---
+        // --- 3. 80m ENSEMBLE (Meteoblue) ---
         async function fetchWindEnsemble() {
-            const url = `https://my.meteoblue.com/packages/wind80ensemble-1h?lat=${LAT}&lon=${LON}&asl=71&apikey=${API_KEY}&windspeed=mph&forecast_days=3`;
+            [cite_start]// [cite: 605] wind80ensemble-1h package
+            const url = `https://my.meteoblue.com/packages/wind80ensemble-1h?lat=${LAT}&lon=${LON}&asl=71&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=3`;
             try {
                 const res = await fetch(url);
+                
+                // Detailed Error Handling for UI
+                if (res.status === 403) throw new Error("API Key Restricted (403)");
+                if (!res.ok) throw new Error(`API Error ${res.status}`);
+
                 const data = await res.json();
+                console.log("Ensemble Data:", data); // View this in Browser Console if it fails parsing
+
                 const ensemble = data.data_1h;
+                if (!ensemble) throw new Error("No 1h Data in Response");
+
                 let html = "";
-                // Forecast documentation states wind80m consensus is most likely [cite: 604, 610]
-                for(let i=0; i < 72; i++) {
+                [cite_start]// [cite: 610] Variables: windspeed_80m_consensus, windspeed_80m_p90
+                const speeds = ensemble.windspeed_80m_consensus || ensemble.windspeed80m_consensus; // Try both key styles
+                const gusts = ensemble.windspeed_80m_p90_exceedence || ensemble.windspeed_80m_p90 || ensemble.windspeed80m_p90; 
+
+                if (!speeds) throw new Error("Data Keys Missing");
+
+                for(let i=0; i < speeds.length && i < 72; i++) {
                     const time = new Date(ensemble.time[i]);
                     html += `<tr>
                         <td style="text-align:left; padding-left:15px;">
                             <span class="station-label">${time.toLocaleDateString([], {weekday: 'short'})}</span>
                             <span class="sub-label">${time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                         </td>
-                        <td><span class="wind-val">${Math.round(ensemble.windspeed_80m_consensus[i])}</span> <span class="unit">mph</span></td>
-                        <td><span class="gust-val">${Math.round(ensemble.windspeed_80m_p90[i])}</span></td>
+                        <td><span class="wind-val">${Math.round(speeds[i])}</span> <span class="unit">mph</span></td>
+                        <td><span class="gust-val">${Math.round(gusts ? gusts[i] : 0)}</span></td>
                     </tr>`;
                 }
                 document.getElementById('ensemble-body').innerHTML = html;
             } catch (err) {
-                document.getElementById('ensemble-body').innerHTML = '<tr><td colspan="3" class="error-msg">Ensemble Unavailable</td></tr>';
+                console.error("Ensemble Fetch Error:", err);
+                document.getElementById('ensemble-body').innerHTML = `<tr><td colspan="3" class="error-msg">${err.message}</td></tr>`;
             }
         }
 
-        // --- NEW: FETCH 5-MIN HIGH RES (24H) ---
+        // --- 4. HIGH RES FORECAST (Meteoblue) ---
+        // Tries 5min first, falls back to 1h if 5min is restricted
         async function fetchHighResWind() {
-            const url = `https://my.meteoblue.com/packages/basic-5min?lat=${LAT}&lon=${LON}&asl=71&apikey=${API_KEY}&windspeed=mph&forecast_days=1`;
+            [cite_start]// Attempt 1: 5-minute Data [cite: 26]
+            let url = `https://my.meteoblue.com/packages/basic-5min?lat=${LAT}&lon=${LON}&asl=71&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=1`;
+            let intervalLabel = "5m";
+
             try {
-                const res = await fetch(url);
+                let res = await fetch(url);
+                
+                // FALLBACK LOGIC: If 5min fails (403), try 1h standard package
+                if (res.status === 403 || res.status === 400) {
+                    console.warn("5min data blocked, falling back to 1h...");
+                    url = `https://my.meteoblue.com/packages/basic-1h?lat=${LAT}&lon=${LON}&asl=71&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=1`;
+                    res = await fetch(url);
+                    intervalLabel = "1h";
+                }
+
+                if (!res.ok) throw new Error(`API Error ${res.status}`);
+                
                 const data = await res.json();
-                const hr = data.data_5min; // Documentation specifies 5min interval available 
+                console.log("Forecast Data:", data);
+
+                // Determine which data block to read based on success
+                const weatherData = data.data_5min || data.data_1h;
+                if (!weatherData) throw new Error("No Weather Data Found");
+
                 let html = "";
-                for(let i=0; i < hr.time.length; i++) {
-                    const timeStr = hr.time[i].split(' ')[1];
+                [cite_start]// [cite: 19] Standard 'windspeed' and 'winddirection' keys
+                for(let i=0; i < weatherData.time.length; i++) {
+                    const timeStr = weatherData.time[i].split(' ')[1]; // Get HH:MM
+                    const speed = weatherData.windspeed[i];
+                    const dir = weatherData.winddirection[i];
+
                     html += `<tr>
-                        <td style="text-align:left; padding-left:15px;"><span class="sub-label">${timeStr}</span></td>
-                        <td><span class="wind-val">${Math.round(hr.windspeed[i])}</span></td>
+                        <td style="text-align:left; padding-left:15px;">
+                            <span class="sub-label">${timeStr} <span style="font-size:0.6rem">(${intervalLabel})</span></span>
+                        </td>
+                        <td><span class="wind-val">${Math.round(speed)}</span></td>
                         <td>
                             <div class="wind-arrow-box">
-                                <span class="arrow-icon" style="transform: rotate(${hr.winddirection[i]}deg); font-size:1rem;">↓</span>
+                                <span class="arrow-icon" style="transform: rotate(${dir}deg); font-size:1rem;">↓</span>
                             </div>
                         </td>
                     </tr>`;
                 }
                 document.getElementById('highres-body').innerHTML = html;
             } catch (err) {
-                document.getElementById('highres-body').innerHTML = '<tr><td colspan="3" class="error-msg">High-Res Unavailable</td></tr>';
+                console.error("Forecast Fetch Error:", err);
+                document.getElementById('highres-body').innerHTML = `<tr><td colspan="3" class="error-msg">${err.message}</td></tr>`;
             }
         }
 
@@ -245,19 +299,20 @@
                     html += `<tr><td style="text-align:left; padding-left:15px;"><span class="station-label">${st.name}</span><span class="sub-label">${st.age}m ago</span></td><td><span class="wind-val">${st.speed}</span></td><td><span class="gust-val">${st.gust}</span></td><td><div class="wind-arrow-box"><span class="arrow-icon" style="transform: rotate(${st.dir}deg)">↓</span><span class="cardinal-text">${st.cardinal}</span></div></td></tr>`;
                 });
             }
+            if (html === "") html = `<tr><td colspan="4">Loading Live Data...</td></tr>`;
             tbody.innerHTML = html;
             document.getElementById('last-update').innerText = "Last Update: " + new Date().toLocaleTimeString();
         }
 
-        // INITIALIZE ALL FEEDS
+        // INITIALIZE
         fetchPeterson();
         fetchRegional();
         fetchWindEnsemble();
         fetchHighResWind();
         
         // REFRESH INTERVALS
-        setInterval(() => { fetchPeterson(); fetchRegional(); }, 120000); // 2 mins for live
-        setInterval(() => { fetchWindEnsemble(); fetchHighResWind(); }, 900000); // 15 mins for forecast
+        setInterval(() => { fetchPeterson(); fetchRegional(); }, 120000); 
+        setInterval(() => { fetchWindEnsemble(); fetchHighResWind(); }, 900000); 
     </script>
 </body>
 </html>
