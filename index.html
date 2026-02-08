@@ -109,7 +109,7 @@
     <div class="card">
         <h2>Thermal Forecast (Meteoblue)</h2>
         <div id="meteogram-box">
-            <img src="https://my.meteoblue.com/images/meteogram_thermal?lat=44.5100&lon=-122.968889&asl=71&tz=America%2FLos_Angeles&apikey=WvHX7n5xTDOKo02y&format=png&dpi=72&lang=en&temperature_units=F&precipitation_units=inch&windspeed_units=mph&forecast_days=1&location_name=Corvallis" 
+            <img src="https://my.meteoblue.com/images/meteogram_thermal?lat=44.510000&lon=-122.968889&asl=440&tz=America%2FLos_Angeles&apikey=WvHX7n5xTDOKo02y&format=png&dpi=72&lang=en&temperature_units=F&precipitation_units=inch&windspeed_units=mph&forecast_days=1&location_name=Peterson%20Butte" 
                  alt="Meteoblue Thermal Forecast" 
                  style="width: 100%; height: auto; border-radius: 8px; display: block;">
         </div>
@@ -118,10 +118,13 @@
     <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
 
     <script>
-        const LAT = 44.51;
+        // === LOCATION CONFIGURATION ===
+        // Strictly set to Peterson Butte coordinates
+        const LAT = 44.510000;
         const LON = -122.968889;
         const METEOBLUE_KEY = 'WvHX7n5xTDOKo02y';
         
+        // Station IDs
         const WU_API_KEY = 'e1f10a1e78da46f5b10a1e78da96f525'; 
         const WU_STATION = 'KORBROWN23';
         const SYNOPTIC_TOKEN = 'bd6b13e22c96448f83932470cf8c5c07'; 
@@ -194,24 +197,20 @@
 
         // --- 3. 80m ENSEMBLE (Meteoblue) ---
         async function fetchWindEnsemble() {
-            [cite_start]// [cite: 605] wind80ensemble-1h package
-            const url = `https://my.meteoblue.com/packages/wind80ensemble-1h?lat=${LAT}&lon=${LON}&asl=71&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=3`;
+            // Updated to use the hardcoded LAT/LON constants
+            const url = `https://my.meteoblue.com/packages/wind80ensemble-1h?lat=${LAT}&lon=${LON}&asl=440&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=3`;
             try {
                 const res = await fetch(url);
-                
-                // Detailed Error Handling for UI
                 if (res.status === 403) throw new Error("API Key Restricted (403)");
                 if (!res.ok) throw new Error(`API Error ${res.status}`);
 
                 const data = await res.json();
-                console.log("Ensemble Data:", data); // View this in Browser Console if it fails parsing
-
                 const ensemble = data.data_1h;
                 if (!ensemble) throw new Error("No 1h Data in Response");
 
                 let html = "";
-                [cite_start]// [cite: 610] Variables: windspeed_80m_consensus, windspeed_80m_p90
-                const speeds = ensemble.windspeed_80m_consensus || ensemble.windspeed80m_consensus; // Try both key styles
+                // Attempt to read consensus and P90 keys (handling potential key naming variations)
+                const speeds = ensemble.windspeed_80m_consensus || ensemble.windspeed80m_consensus; 
                 const gusts = ensemble.windspeed_80m_p90_exceedence || ensemble.windspeed_80m_p90 || ensemble.windspeed80m_p90; 
 
                 if (!speeds) throw new Error("Data Keys Missing");
@@ -230,24 +229,25 @@
                 document.getElementById('ensemble-body').innerHTML = html;
             } catch (err) {
                 console.error("Ensemble Fetch Error:", err);
+                // Fallback message if 80m is not available on this key
                 document.getElementById('ensemble-body').innerHTML = `<tr><td colspan="3" class="error-msg">${err.message}</td></tr>`;
             }
         }
 
-        // --- 4. HIGH RES FORECAST (Meteoblue) ---
+        // --- 4. WIND FORECAST (Meteoblue) ---
         // Tries 5min first, falls back to 1h if 5min is restricted
         async function fetchHighResWind() {
-            [cite_start]// Attempt 1: 5-minute Data [cite: 26]
-            let url = `https://my.meteoblue.com/packages/basic-5min?lat=${LAT}&lon=${LON}&asl=71&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=1`;
+            // 1. Attempt 5-minute Data
+            let url = `https://my.meteoblue.com/packages/basic-5min?lat=${LAT}&lon=${LON}&asl=440&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=1`;
             let intervalLabel = "5m";
 
             try {
                 let res = await fetch(url);
                 
-                // FALLBACK LOGIC: If 5min fails (403), try 1h standard package
+                // 2. FALLBACK: If 5min fails (403 Forbidden), switch to 1h standard package
                 if (res.status === 403 || res.status === 400) {
                     console.warn("5min data blocked, falling back to 1h...");
-                    url = `https://my.meteoblue.com/packages/basic-1h?lat=${LAT}&lon=${LON}&asl=71&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=1`;
+                    url = `https://my.meteoblue.com/packages/basic-1h?lat=${LAT}&lon=${LON}&asl=440&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=1`;
                     res = await fetch(url);
                     intervalLabel = "1h";
                 }
@@ -255,14 +255,12 @@
                 if (!res.ok) throw new Error(`API Error ${res.status}`);
                 
                 const data = await res.json();
-                console.log("Forecast Data:", data);
-
-                // Determine which data block to read based on success
+                
+                // Check which data block was returned
                 const weatherData = data.data_5min || data.data_1h;
                 if (!weatherData) throw new Error("No Weather Data Found");
 
                 let html = "";
-                [cite_start]// [cite: 19] Standard 'windspeed' and 'winddirection' keys
                 for(let i=0; i < weatherData.time.length; i++) {
                     const timeStr = weatherData.time[i].split(' ')[1]; // Get HH:MM
                     const speed = weatherData.windspeed[i];
