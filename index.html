@@ -2,312 +2,112 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Peterson Butte Hub</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wind Speed Profile</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        * { box-sizing: border-box; }
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f2f5; padding: 10px; margin: 0; }
-        h1 { font-size: 1.5rem; margin: 15px 0; color: #333; }
-        
-        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 850px; margin-bottom: 20px; text-align: center; overflow: hidden; }
-        h2 { font-size: 1.2rem; color: #333; margin-top: 0; margin-bottom: 10px; }
-        
-        .wind-banner { width: 100%; overflow-x: auto; }
-        .wind-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
-        .wind-table th { background: #343a40; color: white; padding: 10px 5px; font-size: 0.85rem; text-transform: uppercase; position: sticky; top: 0; }
-        .wind-table td { padding: 12px 8px; border-bottom: 1px solid #eee; text-align: center; vertical-align: middle; }
-        
-        .scroll-container { max-height: 300px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; }
-        
-        .primary-row { background-color: #e8f5e9; border-left: 4px solid #28a745; }
-        .station-label { font-weight: bold; display: block; color: #333; text-align: left; }
-        .sub-label { font-size: 0.75rem; color: #777; display: block; text-align: left; }
-        .wind-val { font-weight: bold; color: #333; font-size: 1.1rem; }
-        .gust-val { color: #d9534f; font-weight: bold; font-size: 1.1rem; }
-        .unit { font-size: 0.7rem; color: #888; font-weight: normal; }
-        
-        .wind-arrow-box { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
-        .arrow-icon { font-size: 1.4rem; color: #007bff; font-weight: bold; display: inline-block; }
-        .cardinal-text { font-size: 0.7rem; font-weight: bold; color: #555; margin-top: 2px; }
-
-        .media-window { width: 100%; position: relative; overflow: hidden; border-radius: 8px; background: #000; touch-action: pan-y; }
-        .cam-height { height: 590px; } 
-        .media-window iframe { width: 100%; height: 100%; border: none; }
-        
-        .refresh-btn { padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 40px; }
-        .updated-time { font-size: 0.7rem; color: #999; margin-top: 5px; text-align: right; font-style: italic; }
-        .error-msg { color: red; font-size: 0.8rem; font-weight: bold; }
+        body { font-family: sans-serif; padding: 20px; text-align: center; }
+        .chart-container { position: relative; height: 60vh; width: 90vw; margin: 0 auto; }
     </style>
 </head>
 <body>
 
-    <h1>Peterson Butte Hub</h1>
-
-    <div class="card">
-        <h2>Current Wind Conditions</h2>
-        <div class="wind-banner">
-            <table class="wind-table">
-                <thead>
-                    <tr>
-                        <th style="text-align:left; padding-left:15px;">Station</th>
-                        <th>Speed</th>
-                        <th>Gust</th>
-                        <th>Dir</th>
-                    </tr>
-                </thead>
-                <tbody id="wind-banner-body">
-                    <tr><td colspan="4">Initializing...</td></tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="updated-time" id="last-update">Waiting for data...</div>
+    <h1>Wind Speed Forecast</h1>
+    <p>Surface to 18,000ft (if available in API response)</p>
+    
+    <div class="chart-container">
+        <canvas id="windChart"></canvas>
     </div>
-
-    <div class="card">
-        [cite_start]<h2>80m Wind Ensemble (Next 3 Days) [cite: 340]</h2>
-        <div class="scroll-container">
-            <table class="wind-table">
-                <thead>
-                    <tr>
-                        <th style="text-align:left; padding-left:15px;">Time</th>
-                        <th>Consensus</th>
-                        <th>P90 Gust</th>
-                    </tr>
-                </thead>
-                <tbody id="ensemble-body">
-                    <tr><td colspan="3">Loading Meteoblue Ensemble...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <div class="card">
-        [cite_start]<h2>High-Res Wind (Next 24h) [cite: 18]</h2>
-        <div class="scroll-container">
-            <table class="wind-table">
-                <thead>
-                    <tr>
-                        <th style="text-align:left; padding-left:15px;">Time (5m)</th>
-                        <th>Speed (mph)</th>
-                        <th>Direction</th>
-                    </tr>
-                </thead>
-                <tbody id="highres-body">
-                    <tr><td colspan="3">Loading Meteoblue 5min Data...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>Live FAA Webcam (West)</h2>
-        <div class="media-window cam-height">
-            <iframe src="https://weathercams.faa.gov/map/-122.63218,44.50524,11/cameraSite/762/details/camera/12793/full" scrolling="no"></iframe>
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>Thermal Forecast (Meteoblue)</h2>
-        <div id="meteogram-box">
-            <img src="https://my.meteoblue.com/images/meteogram_thermal?lat=44.510000&lon=-122.968889&asl=440&tz=America%2FLos_Angeles&apikey=WvHX7n5xTDOKo02y&format=png&dpi=72&lang=en&temperature_units=F&precipitation_units=inch&windspeed_units=mph&forecast_days=1&location_name=Peterson%20Butte" 
-                 alt="Meteoblue Thermal Forecast" 
-                 style="width: 100%; height: auto; border-radius: 8px; display: block;">
-        </div>
-    </div>
-
-    <button class="refresh-btn" onclick="location.reload()">Refresh Hub</button>
 
     <script>
-        // === LOCATION CONFIGURATION ===
-        const LAT = 44.510000;
-        const LON = -122.968889;
-        
-        // KEYS
-        const METEOBLUE_KEY = 'WvHX7n5xTDOKo02y';
-        const WU_API_KEY = 'e1f10a1e78da46f5b10a1e78da96f525'; 
-        const WU_STATION = 'KORBROWN23';
-        const SYNOPTIC_TOKEN = 'bd6b13e22c96448f83932470cf8c5c07'; 
-        const SYNOPTIC_STATIONS = 'KS12,KCVO,KSLE,KEUG';
+        async function fetchData() {
+            // I removed your key for safety. Paste it between the quotes below.
+            const apiKey = "YOUR_API_KEY_HERE"; 
+            
+            // Your specific coordinates and settings
+            const url = `https://my.meteoblue.com/packages/air-15min?apikey=${apiKey}&lat=44.12&lon=-123.214&asl=112&format=json&temperature=F&windspeed=mph&precipitationamount=inch&winddirection=3char&forecast_days=1`;
 
-        let windData = {
-            peterson: { status: 'loading', data: null },
-            regional: { status: 'loading', data: [] }
-        };
-
-        // --- 1. LIVE SENSOR DATA (WU) ---
-        async function fetchPeterson() {
-            const url = `https://api.weather.com/v2/pws/observations/current?stationId=${WU_STATION}&format=json&units=e&apiKey=${WU_API_KEY}&numericPrecision=decimal`;
             try {
-                const res = await fetch(url);
-                if(!res.ok) throw new Error("WU API Failed");
-                const data = await res.json();
-                const obs = data.observations[0];
-                const dir = obs.winddir;
-                const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-                windData.peterson = {
-                    status: 'success',
-                    data: {
-                        speed: obs.imperial.windSpeed,
-                        gust: obs.imperial.windGust,
-                        dir: dir,
-                        cardinal: cardinals[Math.round(dir / 22.5) % 16]
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                
+                const json = await response.json();
+                console.log("API Response:", json); // Check this in Console (F12) to see available data
+
+                // Extract Time Labels
+                // The API usually returns 'data_15min' or 'data_1h' depending on the package.
+                // We check both.
+                const dataBlock = json.data_15min || json.data_1h || json.data_day;
+                const timeLabels = dataBlock.time.map(t => new Date(t).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+
+                // Setup Datasets
+                // Note: 'air-15min' usually only has 'windspeed'. 
+                // Upper air data often looks like 'windspeed_850hPa' in other packages.
+                // We try to grab what is there.
+                
+                const datasets = [
+                    {
+                        label: 'Surface Wind',
+                        data: dataBlock.windspeed, // The standard surface feed
+                        borderColor: 'blue',
+                        borderWidth: 2,
+                        fill: false
                     }
-                };
-            } catch (err) { 
-                console.error("Peterson Error:", err);
-                windData.peterson.status = 'error'; 
-            }
-            renderWindTable(); 
-        }
+                ];
 
-        // --- 2. REGIONAL AIRPORTS (Synoptic) ---
-        async function fetchRegional() {
-            const url = `https://api.synopticdata.com/v2/stations/latest?token=${SYNOPTIC_TOKEN}&stid=${SYNOPTIC_STATIONS}&units=speed|mph,temp|f&vars=wind_speed,wind_direction,wind_gust`;
-            try {
-                const res = await fetch(url);
-                if(!res.ok) throw new Error("Synoptic API Failed");
-                const json = await res.json();
-                if(!json.STATION) throw new Error("No Stations");
-
-                const names = { "KS12": "Albany", "KCVO": "Corvallis", "KSLE": "Salem", "KEUG": "Eugene" };
-                const order = ["KS12", "KCVO", "KSLE", "KEUG"];
-                const cardinals = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-
-                const processedData = json.STATION.sort((a, b) => order.indexOf(a.STID) - order.indexOf(b.STID)).map(st => {
-                    const obs = st.OBSERVATIONS;
-                    const speed = obs.wind_speed_value_1 ? Math.round(obs.wind_speed_value_1.value) : 0;
-                    const dir = obs.wind_direction_value_1 ? Math.round(obs.wind_direction_value_1.value) : 0;
-                    return {
-                        name: names[st.STID] || st.STID,
-                        speed: speed,
-                        gust: obs.wind_gust_value_1 ? Math.round(obs.wind_gust_value_1.value) : '-',
-                        dir: dir,
-                        cardinal: cardinals[Math.round(dir / 22.5) % 16],
-                        age: Math.round((new Date() - new Date(obs.wind_speed_value_1.date_time)) / 60000)
-                    };
-                });
-                windData.regional = { status: 'success', data: processedData };
-            } catch (err) { 
-                console.error("Regional Error:", err);
-                windData.regional.status = 'error'; 
-            }
-            renderWindTable();
-        }
-
-        // --- 3. 80m ENSEMBLE (METEOBLUE) ---
-        [cite_start]// Docs: wind80ensemble-1h [cite: 340, 343]
-        async function fetchEnsemble() {
-            const url = `https://my.meteoblue.com/packages/wind80ensemble-1h?lat=${LAT}&lon=${LON}&asl=440&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=3&format=json`;
-            try {
-                const res = await fetch(url);
-                if (!res.ok) throw new Error(`API Error ${res.status}`);
-                const data = await res.json();
-                
-                // Debug: Log data to see exact keys
-                console.log("Ensemble API Response:", data);
-
-                const ensemble = data.data_1h;
-                if (!ensemble) throw new Error("No 'data_1h' object found");
-
-                // Handling Variable Naming Variations based on Source 348
-                // Check for 'windspeed80m_consensus' OR 'windspeed_80m_consensus'
-                const consensus = ensemble.windspeed80m_consensus || ensemble.windspeed_80m_consensus || ensemble.windspeed_consensus;
-                const p90 = ensemble.windspeed80m_p90_exceedence || ensemble.windspeed_80m_p90_exceedence || ensemble.windspeed80m_p90;
-
-                if (!consensus) throw new Error("Consensus Data Missing");
-
-                let html = "";
-                for(let i=0; i < consensus.length && i < 72; i++) {
-                    const time = new Date(ensemble.time[i]);
-                    // Only show future or recent past
-                    if(i > 0 && time < new Date(new Date().getTime() - 3600000)) continue;
-
-                    html += `<tr>
-                        <td style="text-align:left; padding-left:15px;">
-                            <span class="station-label">${time.toLocaleDateString([], {weekday: 'short'})}</span>
-                            <span class="sub-label">${time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                        </td>
-                        <td><span class="wind-val">${Math.round(consensus[i])}</span> <span class="unit">mph</span></td>
-                        <td><span class="gust-val">${p90 ? Math.round(p90[i]) : '-'}</span></td>
-                    </tr>`;
+                // ATTEMPT to add upper levels (18,000ft is approx 500 hPa)
+                // These keys might not exist in your current 'air-15min' package.
+                if (dataBlock.windspeed_500hPa) {
+                    datasets.push({
+                        label: '18,000ft (500hPa)',
+                        data: dataBlock.windspeed_500hPa,
+                        borderColor: 'red',
+                        borderWidth: 2
+                    });
                 }
-                document.getElementById('ensemble-body').innerHTML = html;
-            } catch (err) {
-                console.error("Ensemble Fetch Error:", err);
-                document.getElementById('ensemble-body').innerHTML = `<tr><td colspan="3" class="error-msg">Ensemble Error: ${err.message}</td></tr>`;
-            }
-        }
-
-        // --- 4. HIGH RES 5-MIN (METEOBLUE) ---
-        [cite_start]// Docs: basic-5min [cite: 18, 780, 785]
-        async function fetchHighResWind() {
-            const url = `https://my.meteoblue.com/packages/basic-5min?lat=${LAT}&lon=${LON}&asl=440&apikey=${METEOBLUE_KEY}&windspeed=mph&forecast_days=1&format=json`;
-            try {
-                const res = await fetch(url);
-                if (!res.ok) throw new Error(`API Error ${res.status}`);
-                const data = await res.json();
                 
-                console.log("HighRes API Response:", data);
-
-                // Source 785: "data_xmin" -> "data_5min"
-                const hr = data.data_5min;
-                
-                if (!hr) throw new Error("No 'data_5min' object found");
-
-                let html = "";
-                for(let i=0; i < hr.time.length; i++) {
-                     // Check 'windspeed' keys, sometimes just 'windspeed' in basic package
-                    const speed = hr.windspeed[i];
-                    const dir = hr.winddirection[i];
-                    
-                    // Simple logic to skip old data (optional, keeping last hour)
-                    // const timeStr = hr.time[i]; // "YYYY-MM-DD HH:MM"
-
-                    html += `<tr>
-                        <td style="text-align:left; padding-left:15px;">
-                            <span class="sub-label">${hr.time[i].split(' ')[1]}</span>
-                        </td>
-                        <td><span class="wind-val">${Math.round(speed)}</span></td>
-                        <td>
-                            <div class="wind-arrow-box">
-                                <span class="arrow-icon" style="transform: rotate(${dir}deg); font-size:1rem;">↓</span>
-                            </div>
-                        </td>
-                    </tr>`;
+                if (dataBlock.windspeed_850hPa) {
+                    datasets.push({
+                        label: '5,000ft (850hPa)',
+                        data: dataBlock.windspeed_850hPa,
+                        borderColor: 'orange',
+                        borderWidth: 2
+                    });
                 }
-                document.getElementById('highres-body').innerHTML = html;
-            } catch (err) {
-                console.error("High Res Error:", err);
-                document.getElementById('highres-body').innerHTML = `<tr><td colspan="3" class="error-msg">High-Res Error: ${err.message}</td></tr>`;
+
+                renderChart(timeLabels, datasets);
+
+            } catch (error) {
+                console.error(error);
+                document.body.innerHTML += `<p style="color:red">Error: ${error.message}. Check console for details.</p>`;
             }
         }
 
-        function renderWindTable() {
-            const tbody = document.getElementById('wind-banner-body');
-            let html = "";
-            if (windData.peterson.status === 'success') {
-                const p = windData.peterson.data;
-                html += `<tr class="primary-row"><td style="text-align:left; padding-left:15px;"><span class="station-label">Peterson Butte</span><span class="sub-label">Live Sensor</span></td><td><span class="wind-val">${p.speed}</span> <span class="unit">mph</span></td><td><span class="gust-val">${p.gust}</span></td><td><div class="wind-arrow-box"><span class="arrow-icon" style="transform: rotate(${p.dir}deg)">↓</span><span class="cardinal-text">${p.cardinal}</span></div></td></tr>`;
-            }
-            if (windData.regional.status === 'success') {
-                windData.regional.data.forEach(st => {
-                    html += `<tr><td style="text-align:left; padding-left:15px;"><span class="station-label">${st.name}</span><span class="sub-label">${st.age}m ago</span></td><td><span class="wind-val">${st.speed}</span></td><td><span class="gust-val">${st.gust}</span></td><td><div class="wind-arrow-box"><span class="arrow-icon" style="transform: rotate(${st.dir}deg)">↓</span><span class="cardinal-text">${st.cardinal}</span></div></td></tr>`;
-                });
-            }
-            if (html === "") html = `<tr><td colspan="4">Loading Live Data...</td></tr>`;
-            tbody.innerHTML = html;
-            document.getElementById('last-update').innerText = "Last Update: " + new Date().toLocaleTimeString();
+        function renderChart(labels, datasets) {
+            const ctx = document.getElementById('windChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Speed (mph)' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Time' }
+                        }
+                    }
+                }
+            });
         }
 
-        // INITIALIZE
-        fetchPeterson();
-        fetchRegional();
-        fetchEnsemble();
-        fetchHighResWind();
-        
-        // REFRESH INTERVALS
-        setInterval(() => { fetchPeterson(); fetchRegional(); }, 120000); 
-        setInterval(() => { fetchEnsemble(); fetchHighResWind(); }, 900000); 
+        fetchData();
     </script>
 </body>
 </html>
