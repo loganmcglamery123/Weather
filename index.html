@@ -87,6 +87,29 @@
             text-align: right;
             transform: translateY(50%); 
         }
+
+        /* NEW: Ground Line Styles */
+        .ground-line {
+            position: absolute;
+            width: 100%;
+            border-bottom: 2px dashed #444;
+            z-index: 5;
+            pointer-events: none; /* Let clicks pass through */
+        }
+
+        .ground-text {
+            position: absolute;
+            right: 5px; /* Stick to right side */
+            background: rgba(255, 255, 255, 0.8);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #333;
+            font-weight: bold;
+            transform: translateY(-110%); /* Move slightly above the line */
+            z-index: 6;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -106,19 +129,18 @@
 <script>
     async function initChart() {
         const container = document.getElementById('chartArea');
-        // Added 'elevation' to the requested fields just in case, though it comes in metadata anyway
+        // Flagstaff, AZ coordinates
         const url = "https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651&hourly=wind_speed_1000hPa,wind_speed_975hPa,wind_speed_950hPa,wind_speed_925hPa,wind_speed_900hPa,wind_speed_850hPa,wind_speed_800hPa,wind_speed_700hPa,wind_speed_600hPa,wind_speed_500hPa,geopotential_height_1000hPa,geopotential_height_500hPa,geopotential_height_975hPa,geopotential_height_600hPa,geopotential_height_950hPa,geopotential_height_925hPa,geopotential_height_850hPa,geopotential_height_900hPa,geopotential_height_800hPa,geopotential_height_700hPa&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
 
         try {
             const response = await fetch(url);
             const data = await response.json();
 
-            // 1. Get Surface Elevation (Meters -> Feet)
-            // Open-Meteo returns the elevation of the requested coordinate in the metadata
+            // 1. Get Surface Elevation 
+            // We convert this specific value to feet so the Label reads correctly in ft
             const surfaceElevation = data.elevation * 3.28084;
-            console.log("Location Elevation:", surfaceElevation);
-
-            // 2. Get Current Hour Index
+            
+            // 2. Get Time Index
             const now = new Date();
             const currentHourISO = now.toISOString().slice(0, 13);
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
@@ -134,14 +156,14 @@
                 };
             });
 
-            // 3. FILTER: Remove points below ground
-            // We give a small buffer (e.g. -100ft) just in case the model is slightly off
+            // 3. Filter underground points
+            // Using a slight buffer (-100ft) to keep surface data visible
             points = points.filter(p => p.alt > (surfaceElevation - 100));
 
-            // Sort by Altitude (Low to High)
+            // Sort Low -> High
             points.sort((a, b) => a.alt - b.alt);
 
-            // Render
+            // Clear and reset axis
             container.innerHTML = '<span class="y-axis-label">Altitude (ft)</span>'; 
             
             const maxAlt = 20000; 
@@ -153,6 +175,7 @@
                 return `hsl(${hue}, 70%, 50%)`;
             }
 
+            // Draw Bars
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
                 const nextP = points[i+1];
@@ -184,14 +207,20 @@
                 container.appendChild(label);
             }
             
-            // Add a "Ground Level" marker line if needed
-            const groundLine = document.createElement('div');
-            groundLine.style.position = 'absolute';
-            groundLine.style.bottom = `${(surfaceElevation / maxAlt) * 100}%`;
-            groundLine.style.width = '100%';
-            groundLine.style.borderBottom = '2px dashed #555';
-            groundLine.title = "Ground Level";
-            container.appendChild(groundLine);
+            // 4. Draw Ground Line & Label
+            const groundPct = (surfaceElevation / maxAlt) * 100;
+            
+            const line = document.createElement('div');
+            line.className = 'ground-line';
+            line.style.bottom = `${groundPct}%`;
+            
+            const text = document.createElement('div');
+            text.className = 'ground-text';
+            text.style.bottom = `${groundPct}%`;
+            text.innerText = `Ground: ${Math.round(surfaceElevation)} ft`;
+            
+            container.appendChild(line);
+            container.appendChild(text);
 
         } catch (err) {
             console.error(err);
