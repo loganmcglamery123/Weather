@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vertical Wind Profile</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -15,102 +17,118 @@
             padding: 20px;
         }
         .container {
-            width: 90%;
-            max-width: 800px;
+            width: 95%;
+            max-width: 900px;
             background: white;
             padding: 20px;
             border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-        h2 { margin-top: 0; color: #333; }
-        p { color: #666; font-size: 0.9em; }
+        h2 { margin-top: 0; color: #333; text-align: center;}
+        p { color: #666; font-size: 0.9em; text-align: center;}
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Current Vertical Wind Profile</h2>
-    <p>Wind Speed & Direction from Ground to ~18,000ft</p>
-    <canvas id="windProfileChart"></canvas>
+    <h2>Current Wind Profile</h2>
+    <p>Speed (mph) vs Altitude (ft)</p>
+    <div style="height: 600px; width: 100%;">
+        <canvas id="windProfileChart"></canvas>
+    </div>
 </div>
 
 <script>
+    // Register the datalabels plugin
+    Chart.register(ChartDataLabels);
+
     async function fetchAndChart() {
-        const url = "https://api.open-meteo.com/v1/forecast?latitude=44.5101&longitude=-122.969&daily=sunrise,sunset&hourly=wind_speed_1000hPa,wind_speed_975hPa,wind_speed_950hPa,wind_speed_925hPa,wind_speed_900hPa,wind_speed_850hPa,wind_speed_800hPa,wind_speed_700hPa,wind_speed_600hPa,wind_speed_500hPa,wind_direction_1000hPa,wind_direction_975hPa,wind_direction_950hPa,wind_direction_925hPa,wind_direction_900hPa,wind_direction_850hPa,wind_direction_800hPa,wind_direction_700hPa,wind_direction_600hPa,wind_direction_500hPa,geopotential_height_1000hPa,geopotential_height_500hPa,geopotential_height_975hPa,geopotential_height_600hPa,geopotential_height_950hPa,geopotential_height_925hPa,geopotential_height_850hPa,geopotential_height_900hPa,geopotential_height_800hPa,geopotential_height_700hPa&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
+        const url = "https://api.open-meteo.com/v1/forecast?latitude=44.5101&longitude=-122.969&daily=sunrise,sunset&hourly=wind_speed_1000hPa,wind_speed_975hPa,wind_speed_950hPa,wind_speed_925hPa,wind_speed_900hPa,wind_speed_850hPa,wind_speed_800hPa,wind_speed_700hPa,wind_speed_600hPa,wind_speed_500hPa,geopotential_height_1000hPa,geopotential_height_500hPa,geopotential_height_975hPa,geopotential_height_600hPa,geopotential_height_950hPa,geopotential_height_925hPa,geopotential_height_850hPa,geopotential_height_900hPa,geopotential_height_800hPa,geopotential_height_700hPa&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
 
         try {
             const response = await fetch(url);
             const data = await response.json();
 
-            // 1. Find the index for the current hour
+            // 1. Find Current Hour
             const now = new Date();
-            // OpenMeteo returns ISO strings (e.g., "2023-10-27T14:00"). 
-            // We just match the current hour.
-            const currentHourISO = now.toISOString().slice(0, 13); // Matches "YYYY-MM-DDTHH"
-            
-            // Find the index in the time array that matches our current hour
+            const currentHourISO = now.toISOString().slice(0, 13); 
             let timeIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
-            if (timeIndex === -1) timeIndex = 0; // Fallback to first hour if mismatch
+            if (timeIndex === -1) timeIndex = 0; 
 
-            // 2. Define the pressure levels we want to graph (from ground up)
-            // 1000hPa is roughly surface, 500hPa is roughly 18,000ft
-            const levels = [1000, 975, 950, 925, 900, 850, 800, 700, 600, 500];
+            // 2. Define Levels (Ordered from Ground -> Up)
+            // Note: We reverse the array order here because in a Bar Chart, 
+            // the first item appears at the TOP. We want Ground (1000hPa) at the BOTTOM.
+            // So we list 500hPa (highest altitude) first.
+            const levels = [500, 600, 700, 800, 850, 900, 925, 950, 975, 1000];
 
-            // 3. Build the dataset for the chart
-            const chartData = levels.map(level => {
-                // Construct property names dynamically (e.g., "wind_speed_1000hPa")
+            // 3. Extract Data
+            const labels = [];
+            const speeds = [];
+
+            levels.forEach(level => {
                 const speedKey = `wind_speed_${level}hPa`;
-                const dirKey = `wind_direction_${level}hPa`;
                 const heightKey = `geopotential_height_${level}hPa`;
 
-                // Get values at the current time index
                 const speed = data.hourly[speedKey][timeIndex];
-                const direction = data.hourly[dirKey][timeIndex];
-                const heightFeet = data.hourly[heightKey][timeIndex];
+                const heightVal = data.hourly[heightKey][timeIndex]; // No conversion as requested
 
-                return {
-                    x: speed,        // X-Axis: Speed
-                    y: heightFeet,   // Y-Axis: Altitude
-                    d: direction     // Custom data: Direction (accessed in tooltip)
-                };
+                // Create the label for the Y-Axis (e.g. "18000 ft")
+                labels.push(`${Math.round(heightVal)} ft`);
+                speeds.push(speed);
             });
 
-            // 4. Create the Chart
+            // 4. Color Helper Function
+            function getColor(value) {
+                if (value < 5) return 'rgba(75, 192, 192, 0.7)';   // Green/Teal (Calm)
+                if (value < 15) return 'rgba(54, 162, 235, 0.7)';  // Blue (Breezy)
+                if (value < 25) return 'rgba(255, 206, 86, 0.7)';  // Yellow (Windy)
+                if (value < 40) return 'rgba(255, 159, 64, 0.7)';  // Orange (Strong)
+                return 'rgba(255, 99, 132, 0.7)';                  // Red (Storm)
+            }
+
+            const bgColors = speeds.map(s => getColor(s));
+            const borderColors = speeds.map(s => getColor(s).replace('0.7', '1'));
+
+            // 5. Create Chart
             const ctx = document.getElementById('windProfileChart').getContext('2d');
             new Chart(ctx, {
-                type: 'scatter', // Scatter allows us to plot Numbers vs Numbers (Height vs Speed)
+                type: 'bar',
                 data: {
+                    labels: labels, // The Altitudes
                     datasets: [{
-                        label: 'Wind Profile',
-                        data: chartData,
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.5)',
-                        showLine: true, // Connect the dots
-                        tension: 0.4,   // Smooth the line slightly
-                        pointRadius: 6,
-                        pointHoverRadius: 8
+                        label: 'Wind Speed',
+                        data: speeds,
+                        backgroundColor: bgColors,
+                        borderColor: borderColors,
+                        borderWidth: 1,
+                        barPercentage: 0.6, // Makes bars thinner/thicker
                     }]
                 },
                 options: {
+                    indexAxis: 'y', // This makes the bars horizontal (Y-axis is categories)
                     responsive: true,
+                    maintainAspectRatio: false,
                     scales: {
                         x: {
                             title: { display: true, text: 'Wind Speed (mph)' },
-                            beginAtZero: true
+                            beginAtZero: true,
+                            grid: { color: '#eee' }
                         },
                         y: {
-                            title: { display: true, text: 'Altitude (ft)' },
-                            beginAtZero: true
+                            title: { display: true, text: 'Altitude' },
+                            grid: { display: false }
                         }
                     },
                     plugins: {
-                        tooltip: {
-                            callbacks: {
-                                // Customize tooltip to show Direction
-                                label: function(context) {
-                                    const point = context.raw;
-                                    return `Speed: ${point.x} mph @ ${point.y} ft (Dir: ${point.d}°)`;
-                                }
+                        legend: { display: false },
+                        datalabels: {
+                            color: 'black',
+                            anchor: 'end',
+                            align: 'start', // Puts the number inside the end of the bar
+                            offset: -4,
+                            font: { weight: 'bold' },
+                            formatter: function(value) {
+                                return value + ' mph';
                             }
                         }
                     }
