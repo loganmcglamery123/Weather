@@ -371,13 +371,14 @@
           t.style.fontSize = "18px";
           t.style.fontWeight = "900";
 
-          t.textContent = emoji.repeat(Math.max(1, count)) + ` (${Math.round(altFtMSL)}ft)`;
+          t.textContent = emoji.repeat(Math.max(1, count));
+          //t.textContent = emoji.repeat(Math.max(1, count)) + ` (${Math.round(altFtMSL)}ft)`;
           svg.appendChild(t);
         }
 
-        drawEmojiMarker(freezingLevelFt, "freezing-label", "❄️", 3);
-        drawEmojiMarker(blHeightMSL, "boundary-label", "🚀", 3);
-        drawEmojiMarker(cloudBaseMSL, "cloud-label", "☁️", 3);
+        drawEmojiMarker(freezingLevelFt, "freezing-label", "❄️", 1);
+        drawEmojiMarker(blHeightMSL, "boundary-label", "🚀", 1);
+        drawEmojiMarker(cloudBaseMSL, "cloud-label", "☁️", 1);
         if (Number.isFinite(currentElevationFt)) {
           // single paraglider
           drawEmojiMarker(currentElevationFt, "elev-label", "🪂", 1);
