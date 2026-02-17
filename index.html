@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Vertical Profile</title>
+    <title>Vertical Profile</title>
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
@@ -16,10 +16,10 @@
 
         .card {
             background: white;
-            padding: 30px 20px;
+            padding: 30px;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 420px; 
+            width: 500px; /* Wider to fit side columns */
             text-align: center;
             position: relative;
         }
@@ -30,15 +30,14 @@
         .chart-frame {
             position: relative;
             height: 600px; 
-            width: 65%; /* Slightly narrower to fit axes */
-            margin-left: auto; margin-right: auto;
-            border: 2px solid #444;
-            background: #fcfcfc;
-            margin-bottom: 25px;
-            margin-top: 25px;
+            width: 60%; /* Chart takes up center 60% */
+            margin: 0 auto; /* Center it */
+            border: 2px solid #333;
+            background: #fafafa;
+            margin-bottom: 20px;
         }
 
-        /* Inner Mask (Only for colored blocks) */
+        /* Inner Mask */
         .clipping-mask {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -46,12 +45,12 @@
             z-index: 1;
         }
 
-        /* SVG Layer for Lines (Sits on top of blocks) */
+        /* SVG Layer (For freezing line only) */
         .svg-layer {
             position: absolute;
             top: 0; left: 0; 
             width: 100%; height: 100%;
-            z-index: 20; /* Top layer */
+            z-index: 20; 
             pointer-events: none; 
         }
 
@@ -67,42 +66,30 @@
             white-space: nowrap;
         }
 
-        /* X-Axis Labels */
         .x-axis-wind {
             margin-top: 5px;
             font-weight: bold;
             color: #555;
             font-size: 0.9rem;
         }
-        .x-axis-temp {
-            position: absolute;
-            top: -30px;
-            width: 100%;
-            text-align: center;
-            font-weight: bold;
-            color: #d32f2f; 
-            font-size: 0.9rem;
-        }
 
-        /* The Colored Blocks */
+        /* Wind Blocks */
         .wind-block {
             position: absolute;
-            left: 0;
-            width: 100%;
-            /* Subtle border to define layers */
-            border-top: 1px solid rgba(255,255,255,0.2); 
+            left: 0; width: 100%;
+            border-top: 1px solid rgba(255,255,255,0.15); 
             transition: opacity 0.2s;
         }
-        .wind-block:hover { opacity: 0.9; }
+        .wind-block:hover { opacity: 0.95; }
 
-        /* Floating Data Labels (Wind) */
+        /* Data Labels (Speed + Arrow) */
         .data-label {
             position: absolute;
             left: 0; width: 100%;
             text-align: center;
             color: white;
             font-weight: 800;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.4);
             font-size: 0.95rem;
             z-index: 2; 
             pointer-events: none; 
@@ -115,16 +102,28 @@
             font-size: 1.2em;
         }
 
-        /* Axis Ticks */
+        /* LEFT AXIS: Altitude Ticks */
         .alt-tick {
             position: absolute;
-            left: -60px; 
-            width: 55px;
+            left: -65px; 
+            width: 60px;
             text-align: right;
             font-size: 0.75rem;
             color: #666;
             transform: translateY(50%); 
-            z-index: 5;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        /* RIGHT AXIS: Temp Values */
+        .temp-tick {
+            position: absolute;
+            right: -60px; /* Push to right side */
+            width: 50px;
+            text-align: left;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #d32f2f;
+            transform: translateY(50%); 
             font-variant-numeric: tabular-nums;
         }
         
@@ -138,32 +137,31 @@
         .ground-tick { font-weight: bold; color: #222; }
         .ground-grid { border-top: 2px dashed #333; }
 
-        /* Temp & Freezing Level Styles */
+        /* Freezing Level Line */
         .freezing-line {
             stroke: #0066ff;
             stroke-width: 2;
             stroke-dasharray: 6,4;
-            opacity: 0.8;
         }
         .freezing-label {
             fill: #0066ff;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             font-weight: bold;
             text-anchor: end; 
         }
-        .temp-line {
-            fill: none;
-            stroke: #d32f2f;
-            stroke-width: 3.5; /* Thicker line */
-            stroke-linejoin: round;
-            filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.3));
-        }
-        .temp-dot {
-            fill: white;
-            stroke: #d32f2f;
-            stroke-width: 2.5;
-        }
         
+        /* Header for Temp Column */
+        .temp-header {
+            position: absolute;
+            right: -70px;
+            top: -25px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #d32f2f;
+            width: 60px;
+            text-align: left;
+        }
+
         .loading-msg { position: absolute; top: 45%; width: 100%; text-align: center; color: #888; }
         .error-msg { padding: 20px; color: #d32f2f; background: #ffebee; border-radius: 8px; }
     </style>
@@ -172,19 +170,17 @@
 
     <div class="card">
         <h2>Vertical Profile</h2>
-        <p>Wind Speed, Direction & Temperature</p>
+        <p>Wind Speed & Temperature</p>
 
         <div class="chart-frame" id="chartArea">
             <span class="y-axis-label">Altitude (ft)</span>
-            <div class="x-axis-temp">Temperature (°F)</div>
+            <span class="temp-header">Temp (°F)</span>
             
-            <div class="loading-msg" id="loading">Loading High-Res Data...</div>
+            <div class="loading-msg" id="loading">Loading Data...</div>
             
             <div class="clipping-mask" id="chartMask"></div>
-            
             <svg class="svg-layer" id="svgLayer"></svg>
-            
-            </div>
+        </div>
 
         <div class="x-axis-wind">Wind Speed (mph)</div>
     </div>
@@ -196,14 +192,12 @@
         const svg = document.getElementById('svgLayer');
         const loading = document.getElementById('loading');
         
-        // High-res pressure levels
         const levels = [
             1000, 975, 950, 925, 900, 875, 850, 825, 800, 
             775, 750, 725, 700, 675, 650, 625, 600, 
             575, 550, 525, 500
         ];
 
-        // Build URL
         let hourlyParams = ["freezing_level_height"]; 
         levels.forEach(l => {
             hourlyParams.push(`wind_speed_${l}hPa`);
@@ -212,18 +206,16 @@
             hourlyParams.push(`temperature_${l}hPa`);
         });
         
-        // Using Flagstaff as example
         const baseUrl = "https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651";
         const settings = "&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
         const url = `${baseUrl}&hourly=${hourlyParams.join(',')}${settings}`;
 
         try {
             const response = await fetch(url);
-            if (!response.ok) throw new Error("API Error. Try again later.");
+            if (!response.ok) throw new Error("API Error");
             const data = await response.json();
-            loading.remove(); // Data loaded
+            loading.remove();
 
-            // Data Processing
             const surfaceElevation = data.elevation * 3.28084; 
             const chartTop = 18000; 
             
@@ -251,38 +243,26 @@
                 };
             }).filter(p => p !== null); 
 
-            // Unit Correction Check
+            // Unit check
             const checkPoint = points.find(p => p.level === 500);
             if (checkPoint && checkPoint.alt < 10000) {
                  points.forEach(p => p.alt = p.alt * 3.28084);
             }
             points.sort((a, b) => a.alt - b.alt);
 
-            // Cleanup old render
             mask.innerHTML = ''; svg.innerHTML = '';
-            container.querySelectorAll('.alt-tick, .grid-line, .data-label').forEach(el => el.remove());
+            container.querySelectorAll('.alt-tick, .temp-tick, .grid-line, .data-label').forEach(el => el.remove());
 
             const viewHeight = chartTop - surfaceElevation;
 
-            // --- SCALING HELPERS ---
             function getAltPct(altitude) {
                 return ((altitude - surfaceElevation) / viewHeight) * 100;
             }
-            
-            const allTemps = points.map(p => p.temp);
-            const minTemp = Math.min(...allTemps) - 5; // Add padding
-            const maxTemp = Math.max(...allTemps) + 5;
-            const tempRange = maxTemp - minTemp;
 
-            function getTempX(temp) {
-                return ((temp - minTemp) / tempRange) * 100;
-            }
-
-            // --- NEW: ADVANCED COLOR INTERPOLATION ---
-            // Helper to interpolate between two HSL colors
+            // --- IMPROVED COLOR GRADIENT (Standard Met Scale) ---
             function interpolateHsl(val, minVal, maxVal, colorStart, colorEnd) {
                 let t = (val - minVal) / (maxVal - minVal);
-                t = Math.max(0, Math.min(1, t)); // Clamp 0-1
+                t = Math.max(0, Math.min(1, t)); 
                 const h = colorStart[0] + (colorEnd[0] - colorStart[0]) * t;
                 const s = colorStart[1] + (colorEnd[1] - colorStart[1]) * t;
                 const l = colorStart[2] + (colorEnd[2] - colorStart[2]) * t;
@@ -290,23 +270,17 @@
             }
 
             function getColor(speed) {
-                // Define multi-stop gradient palette [Hue, Sat, Light]
-                // 0-10mph: Cyan -> Teal
-                if (speed <= 10) return interpolateHsl(speed, 0, 10, [190, 80, 45], [160, 80, 45]);
-                // 10-20mph: Teal -> Green
-                if (speed <= 20) return interpolateHsl(speed, 10, 20, [160, 80, 45], [120, 75, 40]);
-                // 20-30mph: Green -> Lime
-                if (speed <= 30) return interpolateHsl(speed, 20, 30, [120, 75, 40], [80, 85, 45]);
-                // 30-40mph: Lime -> Yellow/Orange
-                if (speed <= 40) return interpolateHsl(speed, 30, 40, [80, 85, 45], [45, 95, 50]);
-                // 40-55mph: Orange -> Red
-                if (speed <= 55) return interpolateHsl(speed, 40, 55, [45, 95, 50], [0, 100, 50]);
-                // 55+: Red -> Magenta/Purple (Extreme)
-                return interpolateHsl(Math.min(speed, 80), 55, 80, [0, 100, 50], [290, 100, 45]);
+                // 0-10: Blue (Calm)
+                if (speed <= 10) return interpolateHsl(speed, 0, 10, [210, 90, 60], [180, 80, 45]);
+                // 10-25: Green (Normal)
+                if (speed <= 25) return interpolateHsl(speed, 10, 25, [150, 80, 45], [100, 80, 45]);
+                // 25-40: Yellow/Orange (Breezy)
+                if (speed <= 40) return interpolateHsl(speed, 25, 40, [60, 90, 50], [30, 95, 50]);
+                // 40+: Red/Purple (Strong)
+                return interpolateHsl(Math.min(speed, 70), 40, 70, [10, 90, 50], [280, 90, 40]);
             }
 
-
-            // --- 1. DRAW WIND BLOCKS ---
+            // --- RENDER LOOP ---
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
                 if (p.alt > chartTop + 1000) continue;
@@ -318,7 +292,7 @@
                 if (realTopPct < 0 || realBottomPct > 100) continue;
                 const heightPct = realTopPct - realBottomPct;
 
-                // Block
+                // 1. Wind Block
                 const block = document.createElement('div');
                 block.className = 'wind-block';
                 block.style.bottom = `${realBottomPct}%`;
@@ -326,63 +300,38 @@
                 block.style.backgroundColor = getColor(p.speed);
                 mask.appendChild(block);
 
-                // Label (Visible Center Logic)
+                // Calculate Visual Center
                 const visualBottom = Math.max(realBottomPct, 0);
                 const visualTop = Math.min(realTopPct, 100);
                 const visualHeight = visualTop - visualBottom;
 
-                if (visualHeight > 3.5) { // Only label if enough space
+                // 2. Labels (Only if space permits)
+                if (visualHeight > 3.0) { 
                     const labelCenter = visualBottom + (visualHeight / 2);
+                    
+                    // Wind Speed Label (Center)
                     const label = document.createElement('div');
                     label.className = 'data-label';
                     label.style.bottom = `${labelCenter}%`; 
-                    // Rotate arrow to point DOWN-WIND (direction wind is blowing TO)
                     label.innerHTML = `
                         <span>${Math.round(p.speed)}</span>
                         <span class="wind-arrow" style="transform: rotate(${p.dir}deg)">↓</span>
                     `;
                     container.appendChild(label);
+
+                    // Temperature Label (Right Side)
+                    const tempTick = document.createElement('div');
+                    tempTick.className = 'temp-tick';
+                    tempTick.style.bottom = `${labelCenter}%`; // Align with center of block
+                    tempTick.innerText = Math.round(p.temp) + '°';
+                    container.appendChild(tempTick);
                 }
             }
 
-            // --- 2. DRAW TEMPERATURE LINE (SVG) ---
-            let polylinePoints = "";
-            
-            // Create dots first so line goes on top
-            points.forEach(p => {
-                const x = getTempX(p.temp); 
-                const y = 100 - getAltPct(p.alt); // Invert Y for SVG coordinate system
-                
-                if (y > -5 && y < 105) {
-                    polylinePoints += `${x}%,${y}% `;
-                    if (y >= 0 && y <= 100) {
-                        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                        circle.setAttribute("cx", `${x}%`);
-                        circle.setAttribute("cy", `${y}%`);
-                        circle.setAttribute("r", "3.5");
-                        circle.setAttribute("class", "temp-dot");
-                        svg.appendChild(circle);
-                    }
-                }
-            });
-
-            // Create the connected line and place it BEFORE dots so it's underneath them
-            const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-            polyline.setAttribute("points", polylinePoints);
-            polyline.setAttribute("class", "temp-line");
-            // Insert before the first child (which are the dots we just created)
-            if(svg.firstChild) {
-                 svg.insertBefore(polyline, svg.firstChild);
-            } else {
-                 svg.appendChild(polyline);
-            }
-
-
-            // --- 3. DRAW FREEZING LEVEL ---
+            // --- FREEZING LEVEL ---
             const freezingPct = getAltPct(freezingLevelFt);
             if (freezingPct >= 0 && freezingPct <= 100) {
                 const lineY = 100 - freezingPct;
-                
                 const flLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
                 flLine.setAttribute("x1", "0%");
                 flLine.setAttribute("x2", "100%");
@@ -391,18 +340,18 @@
                 flLine.setAttribute("class", "freezing-line");
                 svg.appendChild(flLine);
 
+                // Small Text Label for Freezing Level
                 const flText = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                flText.setAttribute("x", "98%"); 
+                flText.setAttribute("x", "2px"); // Left Align
                 flText.setAttribute("y", `${lineY - 2}%`); 
                 flText.setAttribute("class", "freezing-label");
-                flText.textContent = `Freezing: ${Math.round(freezingLevelFt)}ft`;
+                flText.setAttribute("style", "text-anchor: start;"); // Left align
+                flText.textContent = `frz lvl`;
                 svg.appendChild(flText);
             }
 
-            // --- 4. AXIS LABELS ---
-            document.querySelector('.x-axis-temp').innerHTML = `<span style="float:left">${Math.round(minTemp)}°F</span> Temperature (°F) <span style="float:right">${Math.round(maxTemp)}°F</span>`;
-
-            // Ground Tick
+            // --- AXIS ---
+            // Ground
             const groundTick = document.createElement('div');
             groundTick.className = 'alt-tick ground-tick';
             groundTick.style.bottom = `0%`;
@@ -417,7 +366,7 @@
             const start1k = Math.ceil(surfaceElevation / 1000) * 1000;
             for (let alt = start1k; alt <= chartTop; alt += 1000) {
                 const pct = getAltPct(alt);
-                if (pct < 3.5) continue; // Avoid overlap with ground
+                if (pct < 3.5) continue; 
 
                 const tick = document.createElement('div');
                 tick.className = 'alt-tick';
@@ -433,7 +382,7 @@
         } catch (err) {
             console.error(err);
             loading.remove();
-            mask.innerHTML = `<div class="error-msg">Error loading data. Please reload.</div>`;
+            mask.innerHTML = `<div class="error-msg">Error.</div>`;
         }
     }
 
