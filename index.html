@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vertical Wind Profile</title>
+    <title>HD Vertical Wind Profile</title>
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
@@ -19,37 +19,37 @@
             padding: 30px;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 340px;
+            width: 360px;
             text-align: center;
         }
 
         h2 { margin: 0 0 5px 0; color: #333; font-size: 1.4rem; }
         p { color: #666; margin: 0 0 25px 0; font-size: 0.9rem; }
 
-        /* Main Frame - NO overflow hidden here, so labels can stick out */
+        /* Chart Frame */
         .chart-frame {
             position: relative;
             height: 600px; 
             width: 75%;
-            margin-left: 25%; /* Room for Y-axis labels */
+            margin-left: 25%; 
             border-left: 2px solid #333;
             border-bottom: 2px solid #333;
             background: #fafafa;
             margin-bottom: 20px;
         }
 
-        /* Inner Mask - This cuts off the bars that go underground */
+        /* Inner Mask (Clips underground bars) */
         .clipping-mask {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
             overflow: hidden; 
-            z-index: 1; /* Bars sit here */
+            z-index: 1;
         }
 
         .y-axis-label {
             position: absolute;
             transform: rotate(-90deg);
-            left: -100px;
+            left: -110px;
             top: 50%;
             color: #555;
             font-weight: bold;
@@ -75,18 +75,19 @@
             color: white;
             font-weight: bold;
             text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-            font-size: 1rem;
+            font-size: 0.85rem; 
             box-sizing: border-box;
-            border-top: 1px dotted rgba(255,255,255,0.4); 
-            transition: opacity 0.2s;
+            border-top: 1px dotted rgba(255,255,255,0.3); 
+            transition: all 0.2s;
         }
         
         .wind-block:hover {
-            opacity: 0.9;
+            width: 105%; /* Pop out effect */
+            z-index: 10;
+            box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
             cursor: crosshair;
         }
-        
-        /* Altitude Ticks (Y-Axis) - Now visible because parent isn't clipping */
+
         .alt-tick {
             position: absolute;
             left: -65px; 
@@ -94,8 +95,8 @@
             text-align: right;
             font-size: 0.75rem;
             color: #666;
-            transform: translateY(50%); /* Center on the line */
-            z-index: 5; /* Sit above mask */
+            transform: translateY(50%);
+            z-index: 5;
         }
         
         .grid-line {
@@ -103,8 +104,8 @@
             left: 0;
             width: 100%;
             height: 1px;
-            border-top: 1px dashed #ddd;
-            z-index: 2;
+            border-top: 1px dashed #e0e0e0;
+            z-index: 0;
             pointer-events: none;
         }
         
@@ -112,7 +113,7 @@
             position: absolute;
             right: 5px;
             bottom: 5px;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.9);
             padding: 4px 8px;
             border-radius: 4px;
             font-size: 0.75rem;
@@ -128,12 +129,12 @@
 
     <div class="card">
         <h2>Vertical Wind Profile</h2>
-        <p>Current Conditions</p>
+        <p>Direct High-Res Data (No Interpolation)</p>
 
         <div class="chart-frame" id="chartArea">
             <span class="y-axis-label">Altitude (ft)</span>
             <div class="clipping-mask" id="chartMask"></div>
-            </div>
+        </div>
 
         <div class="x-axis-label">Wind Speed (mph)</div>
     </div>
@@ -143,40 +144,74 @@
         const container = document.getElementById('chartArea');
         const mask = document.getElementById('chartMask');
         
-        // Flagstaff, AZ coordinates
-        const url = "https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651&hourly=wind_speed_1000hPa,wind_speed_975hPa,wind_speed_950hPa,wind_speed_925hPa,wind_speed_900hPa,wind_speed_850hPa,wind_speed_800hPa,wind_speed_700hPa,wind_speed_600hPa,wind_speed_500hPa,geopotential_height_1000hPa,geopotential_height_500hPa,geopotential_height_975hPa,geopotential_height_600hPa,geopotential_height_950hPa,geopotential_height_925hPa,geopotential_height_850hPa,geopotential_height_900hPa,geopotential_height_800hPa,geopotential_height_700hPa&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
+        // 1. Define High-Res Levels (25hPa steps)
+        // This list covers Ground to ~18,000ft with much finer detail
+        const levels = [
+            1000, 975, 950, 925, 900, 875, 850, 825, 800, 
+            775, 750, 725, 700, 675, 650, 625, 600, 
+            575, 550, 525, 500
+        ];
+
+        // 2. Build the Massive URL dynamically
+        // We need 'wind_speed_XhPa' and 'geopotential_height_XhPa' for every level
+        let hourlyParams = [];
+        levels.forEach(l => {
+            hourlyParams.push(`wind_speed_${l}hPa`);
+            hourlyParams.push(`geopotential_height_${l}hPa`);
+        });
+        
+        // Base URL (Flagstaff AZ)
+        const baseUrl = "https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651";
+        const settings = "&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
+        // Combine them
+        const url = `${baseUrl}&hourly=${hourlyParams.join(',')}${settings}`;
 
         try {
             const response = await fetch(url);
+            
+            if (!response.ok) throw new Error("API Limit or Error");
+            
             const data = await response.json();
 
-            // 1. Setup Constants
+            // 3. Setup Constants
             const surfaceElevation = data.elevation * 3.28084; 
             const chartTop = 18000; 
             
-            // 2. Get Time Index
+            // 4. Get Time Index
             const now = new Date();
             const currentHourISO = now.toISOString().slice(0, 13);
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
             if (tIndex === -1) tIndex = 0;
 
-            // 3. Define levels
-            const levels = [1000, 975, 950, 925, 900, 850, 800, 700, 600, 500];
-            
+            // 5. Extract Data Points
             let points = levels.map(level => {
+                // Check if API actually returned data for this level (some models might skip 875hPa)
+                const s = data.hourly[`wind_speed_${level}hPa`];
+                const a = data.hourly[`geopotential_height_${level}hPa`];
+                
+                if (!s || !a) return null; // Skip if missing
+
                 return {
-                    level: level, 
-                    speed: data.hourly[`wind_speed_${level}hPa`][tIndex],
-                    alt: data.hourly[`geopotential_height_${level}hPa`][tIndex] 
+                    level: level,
+                    speed: s[tIndex],
+                    alt: a[tIndex] // Feet (API returns feet if requested, or meters. OpenMeteo standard is meters for geopotential)
                 };
-            });
+            }).filter(p => p !== null); // Remove nulls
+
+            // Convert Altitude to Feet manually if the API sent meters (Standard Open-Meteo behavior)
+            // Even with "units=imperial", geopotential_height is often still Meters in JSON. 
+            // We check a value: if 500hPa is < 10,000, it's meters. (18,000ft is ~5500m)
+            const checkPoint = points.find(p => p.level === 500);
+            if (checkPoint && checkPoint.alt < 10000) {
+                 points.forEach(p => p.alt = p.alt * 3.28084);
+            }
+
             points.sort((a, b) => a.alt - b.alt);
 
-            // 4. Render Prep
-            // Only clear the mask (bars), keep the static label in container
+            // 6. Render Prep
             mask.innerHTML = ''; 
-            // Remove old dynamic ticks from container if re-running
-            const oldTicks = container.querySelectorAll('.alt-tick:not(.static), .grid-line');
+            // clear old ticks
+            const oldTicks = container.querySelectorAll('.alt-tick, .grid-line');
             oldTicks.forEach(el => el.remove());
 
             const viewHeight = chartTop - surfaceElevation;
@@ -192,62 +227,79 @@
                 return `hsl(${hue}, 70%, 50%)`;
             }
 
-            // 5. Draw
+            // 7. Draw Blocks (Real Data)
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
-                if (p.alt > chartTop + 2000) continue;
+                
+                // If point is way above chart, skip
+                if (p.alt > chartTop + 1000) continue;
 
                 const nextP = points[i+1];
                 
                 const bottomPct = getPct(p.alt);
-                
                 let topPct;
+                
                 if (nextP) {
                     topPct = getPct(nextP.alt);
                 } else {
-                    topPct = 200; 
+                    topPct = 200; // Extend top block up
                 }
 
+                // Skip if completely out of view
                 if (topPct < 0) continue; 
                 if (bottomPct > 100) continue;
 
                 const heightPct = topPct - bottomPct;
 
-                // -- 1. DRAW BLOCK (Inside Mask) --
+                // -- Draw Block --
                 const block = document.createElement('div');
                 block.className = 'wind-block';
                 block.style.bottom = `${bottomPct}%`;
                 block.style.height = `${heightPct}%`; 
                 block.style.backgroundColor = getColor(p.speed);
-                block.innerHTML = `<span class="block-value">${p.speed}</span>`;
-                block.title = `${p.level} hPa @ ${Math.round(p.alt)} ft`;
+                // Only show number if block is big enough (height > 3%)
+                if (heightPct > 3) {
+                    block.innerHTML = `<span class="block-value">${Math.round(p.speed)}</span>`;
+                }
+                block.title = `${p.level} hPa (~${Math.round(p.alt)} ft) : ${p.speed} mph`;
                 
                 mask.appendChild(block);
-                
-                // -- 2. DRAW LABEL (Inside Frame, Outside Mask) -- 
-                // We only label layers that start within the visible chart area
-                if (bottomPct >= -2 && bottomPct <= 98) {
-                    const tick = document.createElement('div');
-                    tick.className = 'alt-tick';
-                    tick.style.bottom = `${bottomPct}%`;
-                    tick.innerText = (p.alt / 1000).toFixed(1) + 'k';
-                    
-                    const grid = document.createElement('div');
-                    grid.className = 'grid-line';
-                    grid.style.bottom = `${bottomPct}%`;
 
-                    container.appendChild(tick);
-                    container.appendChild(grid);
+                // -- Draw Label (Selective) --
+                // Label every ~2000ft or so to keep it clean
+                // We check if this point is near a 2k interval (6k, 8k, 10k...)
+                const nearestk = Math.round(p.alt / 1000);
+                const diff = Math.abs((p.alt/1000) - nearestk);
+                
+                // If it's close to a whole number (e.g. 7.0k) AND inside the chart
+                if (diff < 0.2 && bottomPct >= 0 && bottomPct <= 95) {
+                    // Avoid duplicate labels near each other
+                    const existing = Array.from(container.querySelectorAll('.alt-tick'))
+                        .find(t => Math.abs(parseFloat(t.style.bottom) - bottomPct) < 5);
+                    
+                    if (!existing) {
+                        const tick = document.createElement('div');
+                        tick.className = 'alt-tick';
+                        tick.style.bottom = `${bottomPct}%`;
+                        tick.innerText = (p.alt / 1000).toFixed(1) + 'k';
+                        
+                        const grid = document.createElement('div');
+                        grid.className = 'grid-line';
+                        grid.style.bottom = `${bottomPct}%`;
+
+                        container.appendChild(tick);
+                        container.appendChild(grid);
+                    }
                 }
             }
 
-            // Ground UI (Inside Frame)
+            // Ground UI
             const badge = document.createElement('div');
             badge.className = 'ground-badge';
             badge.innerText = `Ground: ${Math.round(surfaceElevation)} ft`;
             container.appendChild(badge);
 
-            // Top Label (Inside Frame)
+            // Top Label
             const topLabel = document.createElement('div');
             topLabel.className = 'alt-tick';
             topLabel.style.top = '-8px';
@@ -256,7 +308,7 @@
 
         } catch (err) {
             console.error(err);
-            mask.innerHTML = "Error loading data.";
+            mask.innerHTML = `<div style="padding:20px; color:red">Error: ${err.message}</div>`;
         }
     }
 
