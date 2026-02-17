@@ -212,12 +212,42 @@
         const getAltPct = (altFtMSL) => ((altFtMSL - surfaceElevationFt) / viewHeight) * 100;
 
         function getColor(speed) {
-          if (speed <= 10) return `hsl(190, 80%, 45%)`;
-          if (speed <= 25) return `hsl(120, 75%, 40%)`;
-          if (speed <= 40) return `hsl(45, 95%, 50%)`;
-          if (speed <= 60) return `hsl(10, 100%, 50%)`;
-          return `hsl(280, 100%, 40%)`;
+          // Windy-ish continuous ramp (mph). Add/adjust stops to taste.
+          const stops = [
+            { s: 0,  c: [ 35,  75, 190] }, // deep blue
+            { s: 5,  c: [ 45, 140, 220] }, // blue
+            { s: 10, c: [ 80, 200, 255] }, // cyan
+            { s: 15, c: [ 60, 210, 140] }, // green-cyan
+            { s: 20, c: [ 40, 200,  60] }, // green
+            { s: 25, c: [180, 220,  40] }, // yellow-green
+            { s: 30, c: [255, 200,  40] }, // yellow/orange
+            { s: 35, c: [255, 140,  40] }, // orange
+            { s: 45, c: [235,  60,  60] }, // red
+            { s: 60, c: [190,  60, 170] }, // magenta
+            { s: 80, c: [140,  60, 220] }  // purple
+          ];
+        
+          const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+          const lerp = (a, b, t) => a + (b - a) * t;
+          const lerpColor = (c1, c2, t) => {
+            const r = Math.round(lerp(c1[0], c2[0], t));
+            const g = Math.round(lerp(c1[1], c2[1], t));
+            const b = Math.round(lerp(c1[2], c2[2], t));
+            return `rgb(${r},${g},${b})`;
+          };
+        
+          const x = clamp(Number(speed) || 0, stops[0].s, stops[stops.length - 1].s);
+        
+          let i = 0;
+          while (i < stops.length - 1 && x > stops[i + 1].s) i++;
+        
+          const a = stops[i];
+          const b = stops[i + 1];
+          const t = (x - a.s) / (b.s - a.s || 1);
+        
+          return lerpColor(a.c, b.c, t);
         }
+
 
         points.forEach((p, i) => {
           if (p.alt > chartTop + 1000) return;
