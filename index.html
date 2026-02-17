@@ -19,26 +19,24 @@
             padding: 30px;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 360px;
+            width: 380px; /* Widened slightly for arrows */
             text-align: center;
         }
 
         h2 { margin: 0 0 5px 0; color: #333; font-size: 1.4rem; }
         p { color: #666; margin: 0 0 25px 0; font-size: 0.9rem; }
 
-        /* Chart Frame */
         .chart-frame {
             position: relative;
             height: 600px; 
-            width: 75%;
-            margin-left: 25%; 
+            width: 70%;
+            margin-left: 30%; /* More room for labels */
             border-left: 2px solid #333;
             border-bottom: 2px solid #333;
             background: #fafafa;
             margin-bottom: 20px;
         }
 
-        /* Inner Mask (Clips underground bars) */
         .clipping-mask {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -49,7 +47,7 @@
         .y-axis-label {
             position: absolute;
             transform: rotate(-90deg);
-            left: -110px;
+            left: -120px;
             top: 50%;
             color: #555;
             font-weight: bold;
@@ -75,28 +73,38 @@
             color: white;
             font-weight: bold;
             text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-            font-size: 0.85rem; 
+            font-size: 0.9rem; 
             box-sizing: border-box;
             border-top: 1px dotted rgba(255,255,255,0.3); 
             transition: all 0.2s;
         }
         
         .wind-block:hover {
-            width: 105%; /* Pop out effect */
+            width: 105%; 
             z-index: 10;
             box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
             cursor: crosshair;
         }
 
+        /* The Arrow Icon */
+        .wind-arrow {
+            display: inline-block;
+            margin-left: 8px;
+            font-size: 1.1em;
+            /* We use a simple Unicode arrow. 
+               Transform origin center allows smooth rotation */
+            transform-origin: center;
+        }
+
         /* Axis Ticks */
         .alt-tick {
             position: absolute;
-            left: -85px; /* Moved left to fit specific numbers */
+            left: -90px; 
             width: 80px;
             text-align: right;
             font-size: 0.75rem;
             color: #666;
-            transform: translateY(50%); /* Center vertically on the exact pixel */
+            transform: translateY(50%); 
             z-index: 5;
             font-variant-numeric: tabular-nums;
         }
@@ -111,7 +119,6 @@
             pointer-events: none;
         }
 
-        /* Special styling for the Ground Level Tick to make it stand out */
         .ground-tick {
             font-weight: bold;
             color: #333;
@@ -119,28 +126,13 @@
         .ground-grid {
             border-top: 2px dashed #333;
         }
-        
-        .ground-badge {
-            position: absolute;
-            right: 5px;
-            bottom: 5px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            color: #333;
-            font-weight: bold;
-            z-index: 11;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            pointer-events: none;
-        }
     </style>
 </head>
 <body>
 
     <div class="card">
         <h2>Vertical Wind Profile</h2>
-        <p>Direct High-Res Data</p>
+        <p>Speed & Direction (High-Res)</p>
 
         <div class="chart-frame" id="chartArea">
             <span class="y-axis-label">Altitude (ft)</span>
@@ -155,17 +147,18 @@
         const container = document.getElementById('chartArea');
         const mask = document.getElementById('chartMask');
         
-        // 1. Define High-Res Levels (25hPa steps)
+        // 1. Levels
         const levels = [
             1000, 975, 950, 925, 900, 875, 850, 825, 800, 
             775, 750, 725, 700, 675, 650, 625, 600, 
             575, 550, 525, 500
         ];
 
-        // 2. Build URL
+        // 2. Build URL (Added wind_direction)
         let hourlyParams = [];
         levels.forEach(l => {
             hourlyParams.push(`wind_speed_${l}hPa`);
+            hourlyParams.push(`wind_direction_${l}hPa`); // NEW
             hourlyParams.push(`geopotential_height_${l}hPa`);
         });
         
@@ -178,39 +171,40 @@
             if (!response.ok) throw new Error("API Limit or Error");
             const data = await response.json();
 
-            // 3. Constants
+            // 3. Setup
             const surfaceElevation = data.elevation * 3.28084; 
             const chartTop = 18000; 
             
-            // 4. Time Index
             const now = new Date();
             const currentHourISO = now.toISOString().slice(0, 13);
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
             if (tIndex === -1) tIndex = 0;
 
-            // 5. Extract Data Points
+            // 4. Extract Data (Including Direction)
             let points = levels.map(level => {
                 const s = data.hourly[`wind_speed_${level}hPa`];
+                const d = data.hourly[`wind_direction_${level}hPa`]; // NEW
                 const a = data.hourly[`geopotential_height_${level}hPa`];
-                if (!s || !a) return null;
+
+                if (!s || !a || !d) return null;
 
                 return {
                     level: level,
                     speed: s[tIndex],
+                    dir: d[tIndex],
                     alt: a[tIndex] 
                 };
             }).filter(p => p !== null); 
 
-            // Unit Correction (Meters -> Feet if needed)
+            // Unit Correction
             const checkPoint = points.find(p => p.level === 500);
             if (checkPoint && checkPoint.alt < 10000) {
                  points.forEach(p => p.alt = p.alt * 3.28084);
             }
             points.sort((a, b) => a.alt - b.alt);
 
-            // 6. Setup View
+            // 5. Render Prep
             mask.innerHTML = ''; 
-            // Clear old ticks
             container.querySelectorAll('.alt-tick, .grid-line').forEach(el => el.remove());
 
             const viewHeight = chartTop - surfaceElevation;
@@ -226,7 +220,7 @@
                 return `hsl(${hue}, 70%, 50%)`;
             }
 
-            // 7. Draw Data Blocks
+            // 6. Draw Blocks
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
                 if (p.alt > chartTop + 1000) continue;
@@ -244,18 +238,26 @@
                 block.style.bottom = `${bottomPct}%`;
                 block.style.height = `${heightPct}%`; 
                 block.style.backgroundColor = getColor(p.speed);
+                
+                // Show content if block is large enough
                 if (heightPct > 3) {
-                    block.innerHTML = `<span class="block-value">${Math.round(p.speed)}</span>`;
+                    // Start arrow pointing DOWN (↓). 
+                    // 0deg wind = North Wind (Blows South) = Point Down.
+                    // So we can just rotate by the Direction degrees directly.
+                    // Example: Wind 270 (West) -> Rotate 270 -> Points Right. Correct.
+                    
+                    block.innerHTML = `
+                        <span>${Math.round(p.speed)}</span>
+                        <span class="wind-arrow" style="transform: rotate(${p.dir}deg)">↓</span>
+                    `;
                 }
-                block.title = `${p.level} hPa (~${Math.round(p.alt)} ft) : ${p.speed} mph`;
+                
+                block.title = `Alt: ${Math.round(p.alt)}ft | Speed: ${p.speed}mph | Dir: ${p.dir}°`;
                 mask.appendChild(block);
             }
 
-            // ---------------------------------------------------------
-            // 8. AXIS LABEL GENERATION (Ground + 1000s)
-            // ---------------------------------------------------------
-
-            // A. Draw Ground Label (Always at 0%)
+            // 7. Axis Labels
+            // A. Ground
             const groundTick = document.createElement('div');
             groundTick.className = 'alt-tick ground-tick';
             groundTick.style.bottom = `0%`;
@@ -267,16 +269,10 @@
             groundGrid.style.bottom = `0%`;
             container.appendChild(groundGrid);
 
-            // B. Draw 1000ft Intervals
-            // Start at the next 1000ft mark above ground
+            // B. Intervals
             const start1k = Math.ceil(surfaceElevation / 1000) * 1000;
-
             for (let alt = start1k; alt <= chartTop; alt += 1000) {
                 const pct = getPct(alt);
-
-                // Overlap Check:
-                // If this 1000ft mark is less than 3% away from the ground (approx 300-400ft visually),
-                // SKIP IT so the labels don't crash into each other.
                 if (pct < 4) continue; 
 
                 const tick = document.createElement('div');
