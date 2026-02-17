@@ -41,7 +41,6 @@
       font-weight:600; cursor:pointer;
     }
 
-    /* Narrower chart */
     .chart-frame {
       position: relative;
       height: 600px;
@@ -85,7 +84,6 @@
       transition: opacity 0.2s;
     }
 
-    /* Wind labels INSIDE chart, aligned right */
     .data-label {
       position: absolute;
       right: 6px;
@@ -126,9 +124,8 @@
       border-top: 1px dashed #ddd;
     }
 
-    /* Emoji label colors */
     .freezing-label { fill: #0066ff; font-size: 0.7rem; font-weight: bold; }
-    .boundary-label { fill: #000;    font-size: 0.7rem; font-weight: bold; } /* used for TOL now */
+    .tol-label      { fill: #000;    font-size: 0.7rem; font-weight: bold; }
     .cloud-label    { fill: #555;    font-size: 0.7rem; font-weight: bold; }
     .elev-label     { fill: #2e7d32; font-size: 0.7rem; font-weight: bold; }
   </style>
@@ -136,7 +133,7 @@
 <body>
   <div class="card">
     <h2 id="titleLine">Vertical Profile</h2>
-    <p>Wind, Temp, Cloud Base & Lift Tops</p>
+    <p>Wind, Temp, Cumulus Base (LCL) & Top of Usable Lift (TOL)</p>
 
     <div class="controls">
       <label for="modelSelect">Model:</label>
@@ -223,35 +220,106 @@
       return bestI;
     }
 
-    // ----- Thermo helpers (units: K, m) -----
+    // unit helpers
+    const mToFt = 3.28084;
     const FtoK = (f) => (Number(f) - 32) * (5/9) + 273.15;
     const KtoC = (k) => Number(k) - 273.15;
 
-    // Bolton-style LCL temperature (K) from T(K) and Td(K)
+    // Bolton LCL temperature (K)
     function lclTempK(Tk, Tdk) {
       if (!Number.isFinite(Tk) || !Number.isFinite(Tdk)) return null;
-      // guard against weird inversions
       const Td = Math.min(Tdk, Tk);
       const inv = (1 / (Td - 56)) + (Math.log(Tk / Td) / 800);
       if (!Number.isFinite(inv) || inv === 0) return null;
       return (1 / inv) + 56;
     }
 
-    // Approx LCL height (m AGL) using dry-adiabatic to Tlcl
+    // LCL height (m AGL)
     function lclHeightM(Tk, TlclK) {
       const Gamma_d = 0.0098; // K/m
       if (!Number.isFinite(Tk) || !Number.isFinite(TlclK)) return null;
-      const dz = (Tk - TlclK) / Gamma_d;
-      return Math.max(0, dz);
+      return Math.max(0, (Tk - TlclK) / Gamma_d);
     }
 
-    // Simple parcel temperature profile (K) as function of height z (m AGL)
-    function parcelTempK_atZ(T0K, TlclK, zlclM, zM) {
-      const Gamma_d = 0.0098;  // K/m
-      const Gamma_m = 0.0065;  // K/m (simple moist lapse proxy)
-      if (!Number.isFinite(T0K) || !Number.isFinite(TlclK) || !Number.isFinite(zlclM) || !Number.isFinite(zM)) return null;
-      if (zM <= zlclM) return T0K - Gamma_d * zM;
-      return TlclK - Gamma_m * (zM - zlclM);
+    // Linear interpolation helper for environment T(z)
+    function interp1(x, x0, y0, x1, y1) {
+      if (x1 === x0) return y0;
+      const t = (x - x0) / (x1 - x0);
+      return y0 + (y1 - y0) * t;
+    }
+
+    // Build a smooth-ish environment profile on a fixed AGL grid
+    function buildEnvGrid(profile, zMaxM, dzM) {
+      const out = [];
+      if (!Array.isArray(profile) || profile.length < 2) return out;
+      let j = 0;
+      for (let z = 0; z <= zMaxM; z += dzM) {
+        while (j < profile.length - 2 && profile[j+1].zM < z) j++;
+        const p0 = profile[j];
+        const p1 = profile[j+1];
+        if (!p0 || !p1) break;
+        const T = interp1(z, p0.zM, p0.TenvK, p1.zM, p1.TenvK);
+        out.push({ zM: z, TenvK: T });
+      }
+      return out;
+    }
+
+    // ---- FIXED TOL ----
+    // The 17,000 ft issue is because the earlier parcel model was too warm aloft
+    // (constant moist lapse ≈ 6.5 K/km is often warmer than the real saturated parcel,
+    // and MUCH warmer than a stable nighttime boundary layer).
+    //
+    // New heuristic:
+    // 1) Determine if there is ANY near-surface buoyancy at all.
+    //    Use a strict check in the lowest ~300 m AGL: if parcel isn't warmer than env there,
+    //    TOL collapses to near-ground.
+    // 2) Above LCL use a MORE REALISTIC moist lapse proxy (6.0 K/km) AND enforce that
+    //    buoyancy must remain positive continuously (not just at one high level).
+    //
+    // This makes night/stable cases return <~1000 ft as expected.
+    function computeTOL(profileGrid, T0K, TlclK, zlclM) {
+      if (!profileGrid.length || !Number.isFinite(T0K) || !Number.isFinite(TlclK) || !Number.isFinite(zlclM)) return null;
+
+      const Gamma_d = 0.0098;   // K/m
+      const Gamma_m = 0.0060;   // K/m (cooler parcel aloft than 6.5 K/km -> reduces runaway TOL)
+      const usableDeltaK = 0.2; // small buoyancy threshold (~0.2°C), tuneable
+
+      // helper parcel temp
+      const Tp = (zM) => {
+        if (zM <= zlclM) return T0K - Gamma_d * zM;
+        return TlclK - Gamma_m * (zM - zlclM);
+      };
+
+      // (A) near-surface viability: must have positive buoyancy somewhere below 300 m AGL
+      let hasLowBuoy = false;
+      for (const p of profileGrid) {
+        if (p.zM > 300) break;
+        const dK = Tp(p.zM) - p.TenvK;
+        if (dK >= usableDeltaK) { hasLowBuoy = true; break; }
+      }
+      if (!hasLowBuoy) {
+        // stable/no lift: return ~ground + 50 m
+        return 50; // meters AGL
+      }
+
+      // (B) find highest altitude where buoyancy stays >= threshold without breaking for too long
+      // allow brief noise gaps of up to 2 steps
+      const maxGap = 2;
+      let gap = 0;
+      let bestZ = null;
+
+      for (const p of profileGrid) {
+        const dK = Tp(p.zM) - p.TenvK;
+        if (dK >= usableDeltaK) {
+          bestZ = p.zM;
+          gap = 0;
+        } else {
+          gap++;
+          if (gap > maxGap) break; // buoyancy ended
+        }
+      }
+
+      return bestZ;
     }
 
     async function initChart(selectedModel = "") {
@@ -259,8 +327,6 @@
       const container = document.getElementById('chartArea');
       const mask = document.getElementById('chartMask');
       const svg = document.getElementById('svgLayer');
-
-      const mToFt = 3.28084;
 
       const qs = new URLSearchParams(window.location.search);
       const lat = parseFloat(qs.get('lat'));
@@ -272,18 +338,11 @@
 
       const levels = [1000, 975, 950, 925, 900, 875, 850, 825, 800, 775, 750, 725, 700, 675, 650, 625, 600, 575, 550, 525, 500];
 
-      // NOTE: removed boundary_layer_height from request
       let hourlyParams = ["freezing_level_height", "temperature_2m", "dew_point_2m"];
       levels.forEach(l => {
-        hourlyParams.push(
-          `wind_speed_${l}hPa`,
-          `wind_direction_${l}hPa`,
-          `geopotential_height_${l}hPa`,
-          `temperature_${l}hPa`
-        );
+        hourlyParams.push(`wind_speed_${l}hPa`, `wind_direction_${l}hPa`, `geopotential_height_${l}hPa`, `temperature_${l}hPa`);
       });
 
-      // minutely_15 params (lower level)
       const min15Params = [
         "wind_speed_10m",
         "wind_speed_80m",
@@ -319,13 +378,9 @@
         }
 
         const nowMs = Date.now();
-
-        // hourly index
         const tIndex = nearestIndex(data?.hourly?.time || [], nowMs);
-        const forecastTimeStr = data.hourly.time[tIndex];
-
-        // minutely_15 index
         const mIndex = nearestIndex(data?.minutely_15?.time || [], nowMs);
+        const forecastTimeStr = data.hourly.time[tIndex];
 
         const surfaceElevationFt = data.elevation * mToFt;
 
@@ -335,7 +390,7 @@
 
         const freezingLevelFt = data.hourly.freezing_level_height[tIndex] * mToFt;
 
-        // ----- LCL-based cumulus base (MSL ft) -----
+        // --- LCL cumulus base ---
         const t2mF = data.hourly.temperature_2m[tIndex];
         const dp2mF = data.hourly.dew_point_2m[tIndex];
 
@@ -345,8 +400,7 @@
         const zlclM = lclHeightM(T0K, TlclK);
         const lclMSL_ft = (Number.isFinite(zlclM) ? (surfaceElevationFt + zlclM * mToFt) : null);
 
-        // ----- Build environment profile (z AGL in m, Tenv in K) -----
-        // Add surface point at z=0 using 2m temp
+        // --- environment profile (AGL meters) ---
         let prof = [];
         if (Number.isFinite(T0K)) prof.push({ zM: 0, TenvK: T0K });
 
@@ -355,43 +409,26 @@
           const tf = data.hourly[`temperature_${level}hPa`]?.[tIndex];
           if (!Number.isFinite(a_gpm) || !Number.isFinite(tf)) return;
           const altFtMSL = a_gpm * mToFt;
-          const zM = (altFtMSL - surfaceElevationFt) / mToFt; // AGL meters
+          const zM = (altFtMSL - surfaceElevationFt) / mToFt; // AGL m
           if (!Number.isFinite(zM)) return;
           prof.push({ zM, TenvK: FtoK(tf) });
         });
 
-        prof = prof
-          .filter(p => Number.isFinite(p.zM) && Number.isFinite(p.TenvK))
-          .sort((a, b) => a.zM - b.zM);
+        prof = prof.filter(p => Number.isFinite(p.zM) && Number.isFinite(p.TenvK))
+                   .sort((a, b) => a.zM - b.zM);
 
-        // ----- Compute TOL (Top of Usable Lift) -----
-        // Heuristic:
-        //   - compute parcel temp at each profile height
-        //   - find highest level where parcel is at least +0.5°C warmer than environment (usable buoyancy)
-        // This behaves much closer to "lift tops" than generic PBLH, and collapses at night more often.
+        // create env grid up to ~3500 m AGL (≈11500 ft), 50 m steps
+        const zMaxM = Math.max(500, Math.min(3500, (Math.max(...prof.map(p => p.zM)) || 500)));
+        const envGrid = buildEnvGrid(prof, zMaxM, 50);
+
+        // --- TOL (AGL m) and MSL ft ---
         let tolMSL_ft = null;
-        if (prof.length >= 3 && Number.isFinite(T0K) && Number.isFinite(TlclK) && Number.isFinite(zlclM)) {
-          const usableDeltaK = 0.5; // ~0.5°C threshold for "usable" lift (tunable)
-          let bestZ = null;
-
-          for (const p of prof) {
-            if (p.zM < 0) continue;
-            const Tp = parcelTempK_atZ(T0K, TlclK, zlclM, p.zM);
-            if (!Number.isFinite(Tp)) continue;
-            const dK = Tp - p.TenvK;
-            if (dK >= usableDeltaK) bestZ = p.zM;
-          }
-
-          if (Number.isFinite(bestZ)) {
-            tolMSL_ft = surfaceElevationFt + bestZ * mToFt;
-          }
+        if (envGrid.length >= 5 && Number.isFinite(TlclK) && Number.isFinite(zlclM)) {
+          const tolAGL_m = computeTOL(envGrid, T0K, TlclK, zlclM);
+          if (Number.isFinite(tolAGL_m)) tolMSL_ft = surfaceElevationFt + tolAGL_m * mToFt;
         }
 
-        /* =============================
-           Y-AXIS SCALING
-           Bottom: ground elevation
-           Top: max( current alt, LCL cloud base, TOL, freezing ) + 1000 ft
-           ============================= */
+        // ---------------- Y scale ----------------
         const topCandidate = Math.max(
           Number.isFinite(currentElevationFt) ? currentElevationFt : surfaceElevationFt,
           Number.isFinite(lclMSL_ft) ? lclMSL_ft : surfaceElevationFt,
@@ -400,7 +437,7 @@
         );
         const chartTop = Math.ceil((topCandidate + 1000) / 1000) * 1000;
 
-        // pressure-level wind points
+        // wind points
         let points = levels.map(level => {
           const s = data.hourly[`wind_speed_${level}hPa`]?.[tIndex];
           const d = data.hourly[`wind_direction_${level}hPa`]?.[tIndex];
@@ -409,9 +446,7 @@
           return { speed: s, dir: d, alt: a_gpm * mToFt };
         }).filter(Boolean);
 
-        // add 10m / 80m points from minutely_15
-        const hasMin15 = !!data?.minutely_15;
-        if (hasMin15) {
+        if (data?.minutely_15) {
           const s10 = data.minutely_15.wind_speed_10m?.[mIndex];
           const d10 = data.minutely_15.wind_direction_10m?.[mIndex];
           const g10 = data.minutely_15.wind_gusts_10m?.[mIndex];
@@ -420,21 +455,10 @@
           const d80 = data.minutely_15.wind_direction_80m?.[mIndex];
 
           if (Number.isFinite(s10) && Number.isFinite(d10)) {
-            points.push({
-              speed: s10,
-              dir: d10,
-              alt: surfaceElevationFt + (10 * mToFt),
-              tag: "10m",
-              gust: Number.isFinite(g10) ? g10 : null
-            });
+            points.push({ speed: s10, dir: d10, alt: surfaceElevationFt + (10 * mToFt), tag: "10m", gust: Number.isFinite(g10) ? g10 : null });
           }
           if (Number.isFinite(s80) && Number.isFinite(d80)) {
-            points.push({
-              speed: s80,
-              dir: d80,
-              alt: surfaceElevationFt + (80 * mToFt),
-              tag: "80m"
-            });
+            points.push({ speed: s80, dir: d80, alt: surfaceElevationFt + (80 * mToFt), tag: "80m" });
           }
         }
 
@@ -473,8 +497,8 @@
             label.className = 'data-label';
             label.style.bottom = `${center}%`;
 
-            const toDirMet = (p.dir + 180) % 360;    // meteorological "to" direction (0=N)
-            const rotDeg   = (toDirMet + 270) % 360; // convert to CSS rotation for ➤ (0=E)
+            const toDirMet = (p.dir + 180) % 360;
+            const rotDeg   = (toDirMet + 270) % 360;
 
             const tagStr  = p.tag ? ` <span style="opacity:0.75;font-weight:800;font-size:0.85em">(${p.tag})</span>` : "";
             const gustStr = (p.tag === "10m" && Number.isFinite(p.gust)) ? ` <span style="opacity:0.75;font-weight:900">G${Math.round(p.gust)}</span>` : "";
@@ -491,9 +515,7 @@
           if (!Number.isFinite(altFtMSL)) return;
           const pct = getAltPct(altFtMSL);
           if (pct < 0 || pct > 100) return;
-
           const yPos = 100 - pct;
-
           const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
           t.setAttribute("x", `${xPx}px`);
           t.setAttribute("y", `${yPos}%`);
@@ -505,22 +527,11 @@
           svg.appendChild(t);
         }
 
-        // Markers
         drawEmojiMarker(freezingLevelFt, "freezing-label", "❄️", 1);
-
-        // REPLACED: boundary layer -> TOL
-        // (rocket emoji retained; it now means Top of Usable Lift)
-        if (Number.isFinite(tolMSL_ft)) drawEmojiMarker(tolMSL_ft, "boundary-label", "🚀", 1);
-
-        // REPLACED: cloud base -> LCL cumulus base
+        if (Number.isFinite(tolMSL_ft)) drawEmojiMarker(tolMSL_ft, "tol-label", "🚀", 1);
         if (Number.isFinite(lclMSL_ft)) drawEmojiMarker(lclMSL_ft, "cloud-label", "☁️", 1);
-
         if (Number.isFinite(currentElevationFt)) drawEmojiMarker(currentElevationFt, "elev-label", "🪂", 1);
 
-        /* =============================
-           TICKS
-           Include: ground, 1000s, and feature altitudes
-           ============================= */
         const special = [
           surfaceElevationFt,
           Number.isFinite(currentElevationFt) ? currentElevationFt : null,
