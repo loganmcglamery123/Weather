@@ -19,7 +19,7 @@
             padding: 30px;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 500px; 
+            width: 520px; /* Widened slightly */
             text-align: center;
             position: relative;
         }
@@ -30,7 +30,7 @@
         .chart-frame {
             position: relative;
             height: 600px; 
-            width: 60%; 
+            width: 55%; 
             margin: 0 auto; 
             border: 2px solid #333;
             background: #fafafa;
@@ -70,6 +70,7 @@
             font-size: 0.9rem;
         }
 
+        /* Wind Blocks */
         .wind-block {
             position: absolute;
             left: 0; width: 100%;
@@ -78,6 +79,7 @@
         }
         .wind-block:hover { opacity: 0.95; }
 
+        /* Data Labels */
         .data-label {
             position: absolute;
             left: 0; width: 100%;
@@ -97,25 +99,21 @@
             font-size: 1.2em;
         }
 
+        /* Ticks */
         .alt-tick {
             position: absolute;
-            left: -65px; 
-            width: 60px;
+            left: -65px; width: 60px;
             text-align: right;
-            font-size: 0.75rem;
-            color: #666;
+            font-size: 0.75rem; color: #666;
             transform: translateY(50%); 
             font-variant-numeric: tabular-nums;
         }
         
         .temp-tick {
             position: absolute;
-            right: -60px; 
-            width: 50px;
+            right: -60px; width: 50px;
             text-align: left;
-            font-size: 0.8rem;
-            font-weight: bold;
-            color: #d32f2f;
+            font-size: 0.8rem; font-weight: bold; color: #d32f2f;
             transform: translateY(50%); 
             font-variant-numeric: tabular-nums;
         }
@@ -129,7 +127,16 @@
 
         .ground-tick { font-weight: bold; color: #222; }
         .ground-grid { border-top: 2px dashed #333; }
+        
+        /* Headers */
+        .temp-header {
+            position: absolute;
+            right: -70px; top: -25px;
+            font-size: 0.8rem; font-weight: bold; color: #d32f2f;
+            width: 60px; text-align: left;
+        }
 
+        /* SVG LINES STYLES */
         .freezing-line {
             stroke: #0066ff;
             stroke-width: 2;
@@ -137,20 +144,29 @@
         }
         .freezing-label {
             fill: #0066ff;
-            font-size: 0.7rem;
-            font-weight: bold;
+            font-size: 0.7rem; font-weight: bold;
             text-anchor: end; 
         }
         
-        .temp-header {
-            position: absolute;
-            right: -70px;
-            top: -25px;
-            font-size: 0.8rem;
-            font-weight: bold;
-            color: #d32f2f;
-            width: 60px;
-            text-align: left;
+        .boundary-line {
+            stroke: #000;
+            stroke-width: 2;
+        }
+        .boundary-label {
+            fill: #000;
+            font-size: 0.7rem; font-weight: bold;
+            text-anchor: end;
+        }
+
+        .cloud-line {
+            stroke: #555;
+            stroke-width: 2;
+            stroke-dasharray: 4,2;
+        }
+        .cloud-label {
+            fill: #444;
+            font-size: 0.7rem; font-weight: bold;
+            text-anchor: end;
         }
 
         .loading-msg { position: absolute; top: 45%; width: 100%; text-align: center; color: #888; }
@@ -161,7 +177,7 @@
 
     <div class="card">
         <h2>Vertical Profile</h2>
-        <p>Wind Speed & Temperature</p>
+        <p>Wind, Temp, Cloud Base & Boundary Layer</p>
 
         <div class="chart-frame" id="chartArea">
             <span class="y-axis-label">Altitude (ft)</span>
@@ -189,7 +205,8 @@
             575, 550, 525, 500
         ];
 
-        let hourlyParams = ["freezing_level_height"]; 
+        // ADDED: boundary_layer_height, cloud_base_altitude
+        let hourlyParams = ["freezing_level_height", "boundary_layer_height", "cloud_base_altitude"]; 
         levels.forEach(l => {
             hourlyParams.push(`wind_speed_${l}hPa`);
             hourlyParams.push(`wind_direction_${l}hPa`);
@@ -215,7 +232,18 @@
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
             if (tIndex === -1) tIndex = 0;
 
+            // --- GET SPECIAL LEVELS ---
             const freezingLevelFt = data.hourly.freezing_level_height[tIndex] * 3.28084;
+            
+            // Boundary Layer is usually AGL (Above Ground), so we add surface elevation
+            const blHeightAGL = data.hourly.boundary_layer_height[tIndex] * 3.28084;
+            const blHeightMSL = surfaceElevation + blHeightAGL;
+
+            // Cloud Base is usually ASL (Above Sea Level) in OpenMeteo
+            let cloudBaseMSL = null;
+            if (data.hourly.cloud_base_altitude[tIndex]) {
+                cloudBaseMSL = data.hourly.cloud_base_altitude[tIndex] * 3.28084;
+            }
 
             let points = levels.map(level => {
                 const s = data.hourly[`wind_speed_${level}hPa`];
@@ -234,6 +262,7 @@
                 };
             }).filter(p => p !== null); 
 
+            // Unit check (Meters -> Feet)
             const checkPoint = points.find(p => p.level === 500);
             if (checkPoint && checkPoint.alt < 10000) {
                  points.forEach(p => p.alt = p.alt * 3.28084);
@@ -249,7 +278,7 @@
                 return ((altitude - surfaceElevation) / viewHeight) * 100;
             }
 
-            // --- FIXED COLOR GRADIENT ---
+            // --- COLORS ---
             function interpolateHsl(val, minVal, maxVal, colorStart, colorEnd) {
                 let t = (val - minVal) / (maxVal - minVal);
                 t = Math.max(0, Math.min(1, t)); 
@@ -260,23 +289,14 @@
             }
 
             function getColor(speed) {
-                // 0-10: Blue (Calm)
                 if (speed <= 10) return interpolateHsl(speed, 0, 10, [210, 90, 60], [180, 80, 45]);
-                // 10-25: Green (Normal)
                 if (speed <= 25) return interpolateHsl(speed, 10, 25, [150, 80, 45], [100, 80, 45]);
-                // 25-40: Yellow/Orange (Breezy)
                 if (speed <= 40) return interpolateHsl(speed, 25, 40, [60, 90, 50], [30, 95, 50]);
-                
-                // --- FIXED HIGH SPEED ---
-                // 40-60: Orange -> Red (Hue 30 down to 0)
                 if (speed <= 60) return interpolateHsl(speed, 40, 60, [30, 95, 50], [0, 100, 50]);
-                
-                // 60+: Red -> Purple (Hue 360 down to 270)
-                // We use 360 as start so we don't cross green
                 return interpolateHsl(Math.min(speed, 90), 60, 90, [360, 100, 50], [270, 100, 40]);
             }
 
-            // --- RENDER ---
+            // --- RENDER BLOCKS ---
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
                 if (p.alt > chartTop + 1000) continue;
@@ -288,7 +308,6 @@
                 if (realTopPct < 0 || realBottomPct > 100) continue;
                 const heightPct = realTopPct - realBottomPct;
 
-                // 1. Wind Block
                 const block = document.createElement('div');
                 block.className = 'wind-block';
                 block.style.bottom = `${realBottomPct}%`;
@@ -300,7 +319,6 @@
                 const visualTop = Math.min(realTopPct, 100);
                 const visualHeight = visualTop - visualBottom;
 
-                // 2. Labels
                 if (visualHeight > 3.0) { 
                     const labelCenter = visualBottom + (visualHeight / 2);
                     
@@ -321,25 +339,40 @@
                 }
             }
 
-            // --- FREEZING LEVEL ---
-            const freezingPct = getAltPct(freezingLevelFt);
-            if (freezingPct >= 0 && freezingPct <= 100) {
-                const lineY = 100 - freezingPct;
-                const flLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                flLine.setAttribute("x1", "0%");
-                flLine.setAttribute("x2", "100%");
-                flLine.setAttribute("y1", `${lineY}%`);
-                flLine.setAttribute("y2", `${lineY}%`);
-                flLine.setAttribute("class", "freezing-line");
-                svg.appendChild(flLine);
+            // --- DRAW SVG LINES HELPER ---
+            function drawLine(altitudeFt, className, labelText) {
+                const pct = getAltPct(altitudeFt);
+                if (pct >= 0 && pct <= 100) {
+                    const lineY = 100 - pct;
+                    
+                    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                    line.setAttribute("x1", "0%");
+                    line.setAttribute("x2", "100%");
+                    line.setAttribute("y1", `${lineY}%`);
+                    line.setAttribute("y2", `${lineY}%`);
+                    line.setAttribute("class", className);
+                    svg.appendChild(line);
 
-                const flText = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                flText.setAttribute("x", "2px"); 
-                flText.setAttribute("y", `${lineY - 2}%`); 
-                flText.setAttribute("class", "freezing-label");
-                flText.setAttribute("style", "text-anchor: start;"); 
-                flText.textContent = `frz lvl`;
-                svg.appendChild(flText);
+                    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    text.setAttribute("x", "2px"); 
+                    text.setAttribute("y", `${lineY - 2}%`); 
+                    // Dynamic class for label styling
+                    text.setAttribute("class", className.replace('line', 'label')); 
+                    text.setAttribute("style", "text-anchor: start;"); 
+                    text.textContent = labelText;
+                    svg.appendChild(text);
+                }
+            }
+
+            // 1. Freezing Level
+            drawLine(freezingLevelFt, "freezing-line", "frz lvl");
+            
+            // 2. Boundary Layer
+            drawLine(blHeightMSL, "boundary-line", "bndry layer");
+            
+            // 3. Cloud Base (If exists)
+            if (cloudBaseMSL) {
+                drawLine(cloudBaseMSL, "cloud-line", "cloud base");
             }
 
             // --- AXIS ---
