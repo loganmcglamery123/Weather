@@ -19,7 +19,7 @@
             padding: 30px;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 520px; /* Widened slightly */
+            width: 500px; 
             text-align: center;
             position: relative;
         }
@@ -30,7 +30,7 @@
         .chart-frame {
             position: relative;
             height: 600px; 
-            width: 55%; 
+            width: 60%; 
             margin: 0 auto; 
             border: 2px solid #333;
             background: #fafafa;
@@ -70,7 +70,6 @@
             font-size: 0.9rem;
         }
 
-        /* Wind Blocks */
         .wind-block {
             position: absolute;
             left: 0; width: 100%;
@@ -79,7 +78,6 @@
         }
         .wind-block:hover { opacity: 0.95; }
 
-        /* Data Labels */
         .data-label {
             position: absolute;
             left: 0; width: 100%;
@@ -99,21 +97,25 @@
             font-size: 1.2em;
         }
 
-        /* Ticks */
         .alt-tick {
             position: absolute;
-            left: -65px; width: 60px;
+            left: -65px; 
+            width: 60px;
             text-align: right;
-            font-size: 0.75rem; color: #666;
+            font-size: 0.75rem;
+            color: #666;
             transform: translateY(50%); 
             font-variant-numeric: tabular-nums;
         }
         
         .temp-tick {
             position: absolute;
-            right: -60px; width: 50px;
+            right: -60px; 
+            width: 50px;
             text-align: left;
-            font-size: 0.8rem; font-weight: bold; color: #d32f2f;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #d32f2f;
             transform: translateY(50%); 
             font-variant-numeric: tabular-nums;
         }
@@ -127,50 +129,29 @@
 
         .ground-tick { font-weight: bold; color: #222; }
         .ground-grid { border-top: 2px dashed #333; }
-        
-        /* Headers */
-        .temp-header {
-            position: absolute;
-            right: -70px; top: -25px;
-            font-size: 0.8rem; font-weight: bold; color: #d32f2f;
-            width: 60px; text-align: left;
-        }
 
         /* SVG LINES STYLES */
-        .freezing-line {
-            stroke: #0066ff;
-            stroke-width: 2;
-            stroke-dasharray: 6,4;
-        }
-        .freezing-label {
-            fill: #0066ff;
-            font-size: 0.7rem; font-weight: bold;
-            text-anchor: end; 
-        }
+        .freezing-line { stroke: #0066ff; stroke-width: 2; stroke-dasharray: 6,4; }
+        .freezing-label { fill: #0066ff; font-size: 0.7rem; font-weight: bold; }
         
-        .boundary-line {
-            stroke: #000;
-            stroke-width: 2;
-        }
-        .boundary-label {
-            fill: #000;
-            font-size: 0.7rem; font-weight: bold;
-            text-anchor: end;
-        }
+        .boundary-line { stroke: #000; stroke-width: 2; }
+        .boundary-label { fill: #000; font-size: 0.7rem; font-weight: bold; }
 
-        .cloud-line {
-            stroke: #555;
-            stroke-width: 2;
-            stroke-dasharray: 4,2;
-        }
-        .cloud-label {
-            fill: #444;
-            font-size: 0.7rem; font-weight: bold;
-            text-anchor: end;
+        .cloud-line { stroke: #777; stroke-width: 2; stroke-dasharray: 3,3; }
+        .cloud-label { fill: #555; font-size: 0.7rem; font-weight: bold; }
+        
+        .temp-header {
+            position: absolute;
+            right: -70px;
+            top: -25px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #d32f2f;
+            width: 60px;
+            text-align: left;
         }
 
         .loading-msg { position: absolute; top: 45%; width: 100%; text-align: center; color: #888; }
-        .error-msg { padding: 20px; color: #d32f2f; background: #ffebee; border-radius: 8px; }
     </style>
 </head>
 <body>
@@ -205,83 +186,53 @@
             575, 550, 525, 500
         ];
 
-        // ADDED: boundary_layer_height, cloud_base_altitude
-        let hourlyParams = ["freezing_level_height", "boundary_layer_height", "cloud_base_altitude"]; 
+        let hourlyParams = ["freezing_level_height", "boundary_layer_height", "temperature_2m", "dew_point_2m"]; 
         levels.forEach(l => {
-            hourlyParams.push(`wind_speed_${l}hPa`);
-            hourlyParams.push(`wind_direction_${l}hPa`);
-            hourlyParams.push(`geopotential_height_${l}hPa`);
-            hourlyParams.push(`temperature_${l}hPa`);
+            hourlyParams.push(`wind_speed_${l}hPa`, `wind_direction_${l}hPa`, `geopotential_height_${l}hPa`, `temperature_${l}hPa`);
         });
         
-        const baseUrl = "https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651";
-        const settings = "&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
-        const url = `${baseUrl}&hourly=${hourlyParams.join(',')}${settings}`;
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651&hourly=${hourlyParams.join(',')}&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch`;
 
         try {
             const response = await fetch(url);
-            if (!response.ok) throw new Error("API Error");
             const data = await response.json();
             loading.remove();
 
             const surfaceElevation = data.elevation * 3.28084; 
             const chartTop = 18000; 
-            
             const now = new Date();
             const currentHourISO = now.toISOString().slice(0, 13);
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
             if (tIndex === -1) tIndex = 0;
 
-            // --- GET SPECIAL LEVELS ---
+            // --- CALCULATE SPECIAL LEVELS ---
+            // Freezing Level
             const freezingLevelFt = data.hourly.freezing_level_height[tIndex] * 3.28084;
             
-            // Boundary Layer is usually AGL (Above Ground), so we add surface elevation
-            const blHeightAGL = data.hourly.boundary_layer_height[tIndex] * 3.28084;
-            const blHeightMSL = surfaceElevation + blHeightAGL;
+            // Boundary Layer (AGL to MSL)
+            const blHeightMSL = surfaceElevation + (data.hourly.boundary_layer_height[tIndex] * 3.28084);
 
-            // Cloud Base is usually ASL (Above Sea Level) in OpenMeteo
-            let cloudBaseMSL = null;
-            if (data.hourly.cloud_base_altitude[tIndex]) {
-                cloudBaseMSL = data.hourly.cloud_base_altitude[tIndex] * 3.28084;
-            }
+            // Cloud Base (Estimated LCL)
+            const t2m = data.hourly.temperature_2m[tIndex];
+            const dp2m = data.hourly.dew_point_2m[tIndex];
+            const cloudBaseMSL = surfaceElevation + (((t2m - dp2m) / 4.4) * 1000);
 
             let points = levels.map(level => {
-                const s = data.hourly[`wind_speed_${level}hPa`];
-                const d = data.hourly[`wind_direction_${level}hPa`];
-                const a = data.hourly[`geopotential_height_${level}hPa`];
-                const t = data.hourly[`temperature_${level}hPa`];
-
-                if (!s || !a || !d || !t) return null;
-
-                return {
-                    level: level,
-                    speed: s[tIndex],
-                    dir: d[tIndex],
-                    alt: a[tIndex],
-                    temp: t[tIndex]
-                };
-            }).filter(p => p !== null); 
-
-            // Unit check (Meters -> Feet)
-            const checkPoint = points.find(p => p.level === 500);
-            if (checkPoint && checkPoint.alt < 10000) {
-                 points.forEach(p => p.alt = p.alt * 3.28084);
-            }
-            points.sort((a, b) => a.alt - b.alt);
+                const s = data.hourly[`wind_speed_${level}hPa`][tIndex];
+                const d = data.hourly[`wind_direction_${level}hPa`][tIndex];
+                const a = data.hourly[`geopotential_height_${level}hPa`][tIndex];
+                const t = data.hourly[`temperature_${level}hPa`][tIndex];
+                return { speed: s, dir: d, alt: a * (a < 10000 ? 3.28084 : 1), temp: t };
+            }).filter(p => p.speed !== null).sort((a, b) => a.alt - b.alt);
 
             mask.innerHTML = ''; svg.innerHTML = '';
             container.querySelectorAll('.alt-tick, .temp-tick, .grid-line, .data-label').forEach(el => el.remove());
 
             const viewHeight = chartTop - surfaceElevation;
+            const getAltPct = (alt) => ((alt - surfaceElevation) / viewHeight) * 100;
 
-            function getAltPct(altitude) {
-                return ((altitude - surfaceElevation) / viewHeight) * 100;
-            }
-
-            // --- COLORS ---
             function interpolateHsl(val, minVal, maxVal, colorStart, colorEnd) {
-                let t = (val - minVal) / (maxVal - minVal);
-                t = Math.max(0, Math.min(1, t)); 
+                let t = Math.max(0, Math.min(1, (val - minVal) / (maxVal - minVal)));
                 const h = colorStart[0] + (colorEnd[0] - colorStart[0]) * t;
                 const s = colorStart[1] + (colorEnd[1] - colorStart[1]) * t;
                 const l = colorStart[2] + (colorEnd[2] - colorStart[2]) * t;
@@ -296,86 +247,57 @@
                 return interpolateHsl(Math.min(speed, 90), 60, 90, [360, 100, 50], [270, 100, 40]);
             }
 
-            // --- RENDER BLOCKS ---
-            for (let i = 0; i < points.length; i++) {
-                const p = points[i];
-                if (p.alt > chartTop + 1000) continue;
+            points.forEach((p, i) => {
+                if (p.alt > chartTop + 1000) return;
+                const nextAlt = points[i+1] ? points[i+1].alt : 20000;
+                const bottomPct = getAltPct(p.alt);
+                const heightPct = getAltPct(nextAlt) - bottomPct;
 
-                const nextP = points[i+1];
-                const realBottomPct = getAltPct(p.alt);
-                const realTopPct = nextP ? getAltPct(nextP.alt) : 200;
-
-                if (realTopPct < 0 || realBottomPct > 100) continue;
-                const heightPct = realTopPct - realBottomPct;
+                if (getAltPct(nextAlt) < 0 || bottomPct > 100) return;
 
                 const block = document.createElement('div');
                 block.className = 'wind-block';
-                block.style.bottom = `${realBottomPct}%`;
+                block.style.bottom = `${bottomPct}%`;
                 block.style.height = `${heightPct}%`; 
                 block.style.backgroundColor = getColor(p.speed);
                 mask.appendChild(block);
 
-                const visualBottom = Math.max(realBottomPct, 0);
-                const visualTop = Math.min(realTopPct, 100);
-                const visualHeight = visualTop - visualBottom;
-
-                if (visualHeight > 3.0) { 
-                    const labelCenter = visualBottom + (visualHeight / 2);
-                    
+                const vBottom = Math.max(bottomPct, 0);
+                const vTop = Math.min(bottomPct + heightPct, 100);
+                if (vTop - vBottom > 3.0) {
+                    const center = vBottom + (vTop - vBottom) / 2;
                     const label = document.createElement('div');
                     label.className = 'data-label';
-                    label.style.bottom = `${labelCenter}%`; 
-                    label.innerHTML = `
-                        <span>${Math.round(p.speed)}</span>
-                        <span class="wind-arrow" style="transform: rotate(${p.dir}deg)">↓</span>
-                    `;
+                    label.style.bottom = `${center}%`; 
+                    label.innerHTML = `${Math.round(p.speed)} <span class="wind-arrow" style="transform: rotate(${p.dir}deg)">↓</span>`;
                     container.appendChild(label);
 
-                    const tempTick = document.createElement('div');
-                    tempTick.className = 'temp-tick';
-                    tempTick.style.bottom = `${labelCenter}%`;
-                    tempTick.innerText = Math.round(p.temp) + '°';
-                    container.appendChild(tempTick);
+                    const tTick = document.createElement('div');
+                    tTick.className = 'temp-tick';
+                    tTick.style.bottom = `${center}%`;
+                    tTick.innerText = Math.round(p.temp) + '°';
+                    container.appendChild(tTick);
                 }
+            });
+
+            function drawLine(alt, css, txt) {
+                const pct = getAltPct(alt);
+                if (pct < 0 || pct > 100) return;
+                const y = 100 - pct;
+                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                line.setAttribute("x1", "0%"); line.setAttribute("x2", "100%"); line.setAttribute("y1", `${y}%`); line.setAttribute("y2", `${y}%`);
+                line.setAttribute("class", css);
+                svg.appendChild(line);
+                const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                t.setAttribute("x", "2px"); t.setAttribute("y", `${y - 1}%`); t.setAttribute("class", css.replace('-line', '-label'));
+                t.textContent = txt;
+                svg.appendChild(t);
             }
 
-            // --- DRAW SVG LINES HELPER ---
-            function drawLine(altitudeFt, className, labelText) {
-                const pct = getAltPct(altitudeFt);
-                if (pct >= 0 && pct <= 100) {
-                    const lineY = 100 - pct;
-                    
-                    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                    line.setAttribute("x1", "0%");
-                    line.setAttribute("x2", "100%");
-                    line.setAttribute("y1", `${lineY}%`);
-                    line.setAttribute("y2", `${lineY}%`);
-                    line.setAttribute("class", className);
-                    svg.appendChild(line);
-
-                    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                    text.setAttribute("x", "2px"); 
-                    text.setAttribute("y", `${lineY - 2}%`); 
-                    // Dynamic class for label styling
-                    text.setAttribute("class", className.replace('line', 'label')); 
-                    text.setAttribute("style", "text-anchor: start;"); 
-                    text.textContent = labelText;
-                    svg.appendChild(text);
-                }
-            }
-
-            // 1. Freezing Level
             drawLine(freezingLevelFt, "freezing-line", "frz lvl");
-            
-            // 2. Boundary Layer
-            drawLine(blHeightMSL, "boundary-line", "bndry layer");
-            
-            // 3. Cloud Base (If exists)
-            if (cloudBaseMSL) {
-                drawLine(cloudBaseMSL, "cloud-line", "cloud base");
-            }
+            drawLine(blHeightMSL, "boundary-line", "boundary");
+            drawLine(cloudBaseMSL, "cloud-line", "cld base (est)");
 
-            // --- AXIS ---
             const groundTick = document.createElement('div');
             groundTick.className = 'alt-tick ground-tick';
             groundTick.style.bottom = `0%`;
@@ -386,31 +308,22 @@
             groundGrid.style.bottom = `0%`;
             container.appendChild(groundGrid);
 
-            const start1k = Math.ceil(surfaceElevation / 1000) * 1000;
-            for (let alt = start1k; alt <= chartTop; alt += 1000) {
-                const pct = getAltPct(alt);
-                if (pct < 3.5) continue; 
-
+            for (let a = Math.ceil(surfaceElevation/1000)*1000; a <= chartTop; a+=1000) {
+                const pct = getAltPct(a);
+                if (pct < 3.5) continue;
                 const tick = document.createElement('div');
                 tick.className = 'alt-tick';
                 tick.style.bottom = `${pct}%`;
-                tick.innerText = alt;
+                tick.innerText = a;
                 const grid = document.createElement('div');
                 grid.className = 'grid-line';
                 grid.style.bottom = `${pct}%`;
                 container.appendChild(tick);
                 container.appendChild(grid);
             }
-
-        } catch (err) {
-            console.error(err);
-            loading.remove();
-            mask.innerHTML = `<div class="error-msg">Error.</div>`;
-        }
+        } catch (e) { console.error(e); }
     }
-
     initChart();
 </script>
-
 </body>
 </html>
