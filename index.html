@@ -88,15 +88,17 @@
             cursor: crosshair;
         }
 
+        /* Axis Ticks */
         .alt-tick {
             position: absolute;
-            left: -65px; 
-            width: 60px;
+            left: -85px; /* Moved left to fit specific numbers */
+            width: 80px;
             text-align: right;
             font-size: 0.75rem;
             color: #666;
-            transform: translateY(50%);
+            transform: translateY(50%); /* Center vertically on the exact pixel */
             z-index: 5;
+            font-variant-numeric: tabular-nums;
         }
         
         .grid-line {
@@ -104,9 +106,18 @@
             left: 0;
             width: 100%;
             height: 1px;
-            border-top: 1px dashed #e0e0e0;
+            border-top: 1px dashed #ccc;
             z-index: 0;
             pointer-events: none;
+        }
+
+        /* Special styling for the Ground Level Tick to make it stand out */
+        .ground-tick {
+            font-weight: bold;
+            color: #333;
+        }
+        .ground-grid {
+            border-top: 2px dashed #333;
         }
         
         .ground-badge {
@@ -129,7 +140,7 @@
 
     <div class="card">
         <h2>Vertical Wind Profile</h2>
-        <p>Direct High-Res Data (No Interpolation)</p>
+        <p>Direct High-Res Data</p>
 
         <div class="chart-frame" id="chartArea">
             <span class="y-axis-label">Altitude (ft)</span>
@@ -145,39 +156,33 @@
         const mask = document.getElementById('chartMask');
         
         // 1. Define High-Res Levels (25hPa steps)
-        // This list covers Ground to ~18,000ft with much finer detail
         const levels = [
             1000, 975, 950, 925, 900, 875, 850, 825, 800, 
             775, 750, 725, 700, 675, 650, 625, 600, 
             575, 550, 525, 500
         ];
 
-        // 2. Build the Massive URL dynamically
-        // We need 'wind_speed_XhPa' and 'geopotential_height_XhPa' for every level
+        // 2. Build URL
         let hourlyParams = [];
         levels.forEach(l => {
             hourlyParams.push(`wind_speed_${l}hPa`);
             hourlyParams.push(`geopotential_height_${l}hPa`);
         });
         
-        // Base URL (Flagstaff AZ)
         const baseUrl = "https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651";
         const settings = "&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
-        // Combine them
         const url = `${baseUrl}&hourly=${hourlyParams.join(',')}${settings}`;
 
         try {
             const response = await fetch(url);
-            
             if (!response.ok) throw new Error("API Limit or Error");
-            
             const data = await response.json();
 
-            // 3. Setup Constants
+            // 3. Constants
             const surfaceElevation = data.elevation * 3.28084; 
             const chartTop = 18000; 
             
-            // 4. Get Time Index
+            // 4. Time Index
             const now = new Date();
             const currentHourISO = now.toISOString().slice(0, 13);
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
@@ -185,34 +190,28 @@
 
             // 5. Extract Data Points
             let points = levels.map(level => {
-                // Check if API actually returned data for this level (some models might skip 875hPa)
                 const s = data.hourly[`wind_speed_${level}hPa`];
                 const a = data.hourly[`geopotential_height_${level}hPa`];
-                
-                if (!s || !a) return null; // Skip if missing
+                if (!s || !a) return null;
 
                 return {
                     level: level,
                     speed: s[tIndex],
-                    alt: a[tIndex] // Feet (API returns feet if requested, or meters. OpenMeteo standard is meters for geopotential)
+                    alt: a[tIndex] 
                 };
-            }).filter(p => p !== null); // Remove nulls
+            }).filter(p => p !== null); 
 
-            // Convert Altitude to Feet manually if the API sent meters (Standard Open-Meteo behavior)
-            // Even with "units=imperial", geopotential_height is often still Meters in JSON. 
-            // We check a value: if 500hPa is < 10,000, it's meters. (18,000ft is ~5500m)
+            // Unit Correction (Meters -> Feet if needed)
             const checkPoint = points.find(p => p.level === 500);
             if (checkPoint && checkPoint.alt < 10000) {
                  points.forEach(p => p.alt = p.alt * 3.28084);
             }
-
             points.sort((a, b) => a.alt - b.alt);
 
-            // 6. Render Prep
+            // 6. Setup View
             mask.innerHTML = ''; 
-            // clear old ticks
-            const oldTicks = container.querySelectorAll('.alt-tick, .grid-line');
-            oldTicks.forEach(el => el.remove());
+            // Clear old ticks
+            container.querySelectorAll('.alt-tick, .grid-line').forEach(el => el.remove());
 
             const viewHeight = chartTop - surfaceElevation;
 
@@ -227,84 +226,71 @@
                 return `hsl(${hue}, 70%, 50%)`;
             }
 
-            // 7. Draw Blocks (Real Data)
+            // 7. Draw Data Blocks
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
-                
-                // If point is way above chart, skip
                 if (p.alt > chartTop + 1000) continue;
 
                 const nextP = points[i+1];
-                
                 const bottomPct = getPct(p.alt);
-                let topPct;
-                
-                if (nextP) {
-                    topPct = getPct(nextP.alt);
-                } else {
-                    topPct = 200; // Extend top block up
-                }
+                let topPct = nextP ? getPct(nextP.alt) : 200;
 
-                // Skip if completely out of view
-                if (topPct < 0) continue; 
-                if (bottomPct > 100) continue;
+                if (topPct < 0 || bottomPct > 100) continue;
 
                 const heightPct = topPct - bottomPct;
 
-                // -- Draw Block --
                 const block = document.createElement('div');
                 block.className = 'wind-block';
                 block.style.bottom = `${bottomPct}%`;
                 block.style.height = `${heightPct}%`; 
                 block.style.backgroundColor = getColor(p.speed);
-                // Only show number if block is big enough (height > 3%)
                 if (heightPct > 3) {
                     block.innerHTML = `<span class="block-value">${Math.round(p.speed)}</span>`;
                 }
                 block.title = `${p.level} hPa (~${Math.round(p.alt)} ft) : ${p.speed} mph`;
-                
                 mask.appendChild(block);
-
-                // -- Draw Label (Selective) --
-                // Label every ~2000ft or so to keep it clean
-                // We check if this point is near a 2k interval (6k, 8k, 10k...)
-                const nearestk = Math.round(p.alt / 1000);
-                const diff = Math.abs((p.alt/1000) - nearestk);
-                
-                // If it's close to a whole number (e.g. 7.0k) AND inside the chart
-                if (diff < 0.2 && bottomPct >= 0 && bottomPct <= 95) {
-                    // Avoid duplicate labels near each other
-                    const existing = Array.from(container.querySelectorAll('.alt-tick'))
-                        .find(t => Math.abs(parseFloat(t.style.bottom) - bottomPct) < 5);
-                    
-                    if (!existing) {
-                        const tick = document.createElement('div');
-                        tick.className = 'alt-tick';
-                        tick.style.bottom = `${bottomPct}%`;
-                        tick.innerText = (p.alt / 1000).toFixed(1) + 'k';
-                        
-                        const grid = document.createElement('div');
-                        grid.className = 'grid-line';
-                        grid.style.bottom = `${bottomPct}%`;
-
-                        container.appendChild(tick);
-                        container.appendChild(grid);
-                    }
-                }
             }
 
-            // Ground UI
-            const badge = document.createElement('div');
-            badge.className = 'ground-badge';
-            badge.innerText = `Ground: ${Math.round(surfaceElevation)} ft`;
-            container.appendChild(badge);
+            // ---------------------------------------------------------
+            // 8. AXIS LABEL GENERATION (Ground + 1000s)
+            // ---------------------------------------------------------
 
-            // Top Label
-            const topLabel = document.createElement('div');
-            topLabel.className = 'alt-tick';
-            topLabel.style.top = '-8px';
-            topLabel.innerText = '18.0k';
-            container.appendChild(topLabel);
+            // A. Draw Ground Label (Always at 0%)
+            const groundTick = document.createElement('div');
+            groundTick.className = 'alt-tick ground-tick';
+            groundTick.style.bottom = `0%`;
+            groundTick.innerText = Math.round(surfaceElevation);
+            container.appendChild(groundTick);
+
+            const groundGrid = document.createElement('div');
+            groundGrid.className = 'grid-line ground-grid';
+            groundGrid.style.bottom = `0%`;
+            container.appendChild(groundGrid);
+
+            // B. Draw 1000ft Intervals
+            // Start at the next 1000ft mark above ground
+            const start1k = Math.ceil(surfaceElevation / 1000) * 1000;
+
+            for (let alt = start1k; alt <= chartTop; alt += 1000) {
+                const pct = getPct(alt);
+
+                // Overlap Check:
+                // If this 1000ft mark is less than 3% away from the ground (approx 300-400ft visually),
+                // SKIP IT so the labels don't crash into each other.
+                if (pct < 4) continue; 
+
+                const tick = document.createElement('div');
+                tick.className = 'alt-tick';
+                tick.style.bottom = `${pct}%`;
+                tick.innerText = alt;
+                
+                const grid = document.createElement('div');
+                grid.className = 'grid-line';
+                grid.style.bottom = `${pct}%`;
+
+                container.appendChild(tick);
+                container.appendChild(grid);
+            }
 
         } catch (err) {
             console.error(err);
