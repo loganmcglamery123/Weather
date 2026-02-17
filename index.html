@@ -25,7 +25,6 @@
         .boundary-label { fill: #000; font-size: 0.65rem; font-weight: bold; }
         .cloud-line { stroke: #777; stroke-width: 2; stroke-dasharray: 3,3; }
         .cloud-label { fill: #555; font-size: 0.65rem; font-weight: bold; }
-        /* NEW: Current Altitude Line */
         .current-alt-line { stroke: #e91e63; stroke-width: 3; }
         .current-alt-label { fill: #e91e63; font-size: 0.7rem; font-weight: 900; }
     </style>
@@ -42,22 +41,37 @@
 
 <script>
     let currentData = null;
+    const mToFt = 3.28084;
+    const chartTop = 18000;
+
+    // Helper to calculate distance for re-fetching weather
+    function getDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371; 
+        const dLat = (lat2-lat1) * Math.PI / 180;
+        const dLon = (lon2-lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
 
     async function updateFromXCTrack() {
-        // Try to get data from XCTrack Interface 
-        if (typeof XCTrack !== 'undefined') {
-            const xcJson = XCTrack.getLocation(); // 
-            if (xcJson && xcJson !== "null") {
-                const loc = JSON.parse(xcJson); // [cite: 6]
-                if (loc.isValid) { // [cite: 20]
-                    // Initial fetch or if moved significantly (>1km)
-                    if (!currentData || getDistance(loc.lat, loc.lon, currentData.lat, currentData.lon) > 1) {
-                        await fetchData(loc.lat, loc.lon);
+        if (typeof XCTrack !== 'undefined' && XCTrack.getLocation) { [cite: 5]
+            const xcJson = XCTrack.getLocation(); [cite: 5]
+            if (xcJson && xcJson !== "null") { [cite: 6]
+                const loc = JSON.parse(xcJson); [cite: 6]
+                if (loc.isValid) { [cite: 20]
+                    const lat = loc.lat; [cite: 14]
+                    const lon = loc.lon; [cite: 12]
+                    const altFt = loc.altGps * mToFt; [cite: 18]
+
+                    // Initial fetch or if moved significantly (>2km)
+                    if (!currentData || getDistance(lat, lon, currentData.lat, currentData.lon) > 2) {
+                        await fetchData(lat, lon);
                     }
-                    // Always update the current altitude line
-                    drawCurrentAlt(loc.altGps * 3.28084); // Convert Meters to Feet [cite: 18]
+                    
                     document.getElementById('coords-display').innerText = 
-                        `Lat: ${loc.lat.toFixed(3)} | Lon: ${loc.lon.toFixed(3)} | Alt: ${Math.round(loc.altGps * 3.28084)}ft`;
+                        `Lat: ${lat.toFixed(3)} | Lon: ${lon.toFixed(3)} | Alt: ${Math.round(altFt)}ft`;
+                    
+                    drawCurrentAlt(altFt);
                 }
             }
         }
@@ -65,12 +79,11 @@
 
     function drawCurrentAlt(altFt) {
         const svg = document.getElementById('svgLayer');
-        // Remove old current alt line
         svg.querySelectorAll('.current-alt-line, .current-alt-label').forEach(e => e.remove());
         
         if (!currentData) return;
         
-        const pct = ((altFt - currentData.surfaceElevation) / (18000 - currentData.surfaceElevation)) * 100;
+        const pct = ((altFt - currentData.surfaceElevation) / (chartTop - currentData.surfaceElevation)) * 100;
         if (pct >= 0 && pct <= 100) {
             const y = 100 - pct;
             const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -98,18 +111,17 @@
         try {
             const response = await fetch(url);
             const data = await response.json();
-            const surfaceElevation = data.elevation * 3.28084;
+            const surfaceElevation = data.elevation * mToFt;
             currentData = { lat, lon, surfaceElevation, data };
-            renderStaticElements();
-        } catch (e) { console.error(e); }
+            renderChart();
+        } catch (e) { console.error("Weather Fetch Error:", e); }
     }
 
-    function renderStaticElements() {
+    function renderChart() {
         const container = document.getElementById('chartArea');
         const mask = document.getElementById('chartMask');
         const svg = document.getElementById('svgLayer');
         const { surfaceElevation, data } = currentData;
-        const chartTop = 18000;
         const viewHeight = chartTop - surfaceElevation;
         const getAltPct = (alt) => ((alt - surfaceElevation) / viewHeight) * 100;
         
@@ -118,24 +130,69 @@
         let tIndex = data.hourly.time.findIndex(t => t.startsWith(hourISO));
         if (tIndex === -1) tIndex = 0;
 
-        mask.innerHTML = ''; svg.innerHTML = '';
+        mask.innerHTML = ''; 
+        svg.innerHTML = '';
         container.querySelectorAll('.alt-tick, .temp-tick, .grid-line, .data-label').forEach(el => el.remove());
 
         // Draw Atmosphere Lines
-        const flFt = data.hourly.freezing_level_height[tIndex] * 3.28084;
-        const blFt = surfaceElevation + (data.hourly.boundary_layer_height[tIndex] * 3.28084);
-        const cbFt = surfaceElevation + (((data.hourly.temperature_2m[tIndex] - data.hourly.dew_point_2m[tIndex]) / 4.4) * 1000);
+        drawLine(data.hourly.freezing_level_height[tIndex] * mToFt, "freezing-line", "frz lvl");
+        drawLine(surfaceElevation + (data.hourly.boundary_layer_height[tIndex] * mToFt), "boundary-line", "boundary");
+        drawLine(surfaceElevation + (((data.hourly.temperature_2m[tIndex] - data.hourly.dew_point_2m[tIndex]) / 4.4) * 1000), "cloud-line", "cld base");
 
-        drawLine(flFt, "freezing-line", "frz lvl");
-        drawLine(blFt, "boundary-line", "boundary");
-        drawLine(cbFt, "cloud-line", "cld base");
+        let points = levels.map(level => {
+            const s = data.hourly[`wind_speed_${level}hPa`][tIndex];
+            const d = data.hourly[`wind_direction_${level}hPa`][tIndex];
+            const a = data.hourly[`geopotential_height_${level}hPa`][tIndex];
+            const t = data.hourly[`temperature_${level}hPa`][tIndex];
+            return { speed: s, dir: d, alt: a * mToFt, temp: t };
+        }).filter(p => p.speed !== null).sort((a, b) => a.alt - b.alt);
 
-        // (Wind block rendering and axis ticks logic here - unchanged)
-        // ... [Include your existing wind block rendering loop]
+        points.forEach((p, i) => {
+            if (p.alt > chartTop + 1000) return;
+            const nextAlt = points[i+1] ? points[i+1].alt : chartTop + 2000;
+            const bottomPct = getAltPct(p.alt);
+            const heightPct = getAltPct(nextAlt) - bottomPct;
+
+            const block = document.createElement('div');
+            block.className = 'wind-block';
+            block.style.bottom = `${bottomPct}%`;
+            block.style.height = `${heightPct}%`; 
+            block.style.backgroundColor = p.speed <= 15 ? '#4caf50' : p.speed <= 30 ? '#ff9800' : '#f44336';
+            mask.appendChild(block);
+
+            if (heightPct > 4.0) {
+                const center = bottomPct + (heightPct / 2);
+                const label = document.createElement('div');
+                label.className = 'data-label';
+                label.style.bottom = `${center}%`; 
+                label.innerHTML = `${Math.round(p.speed)} <span style="display:inline-block; transform:rotate(${p.dir}deg)">↓</span>`;
+                container.appendChild(label);
+
+                const tTick = document.createElement('div');
+                tTick.className = 'temp-tick';
+                tTick.style.bottom = `${center}%`;
+                tTick.innerText = Math.round(p.temp) + '°';
+                container.appendChild(tTick);
+            }
+        });
+
+        // Altitude Ticks
+        for (let a = Math.ceil(surfaceElevation/1000)*1000; a <= chartTop; a+=2000) {
+            const pct = getAltPct(a);
+            const tick = document.createElement('div');
+            tick.className = 'alt-tick';
+            tick.style.bottom = `${pct}%`;
+            tick.innerText = a/1000 + 'k';
+            const grid = document.createElement('div');
+            grid.className = 'grid-line';
+            grid.style.bottom = `${pct}%`;
+            container.appendChild(tick);
+            container.appendChild(grid);
+        }
     }
 
     function drawLine(alt, css, txt) {
-        const pct = ((alt - currentData.surfaceElevation) / (18000 - currentData.surfaceElevation)) * 100;
+        const pct = ((alt - currentData.surfaceElevation) / (chartTop - currentData.surfaceElevation)) * 100;
         if (pct < 0 || pct > 100) return;
         const y = 100 - pct;
         const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -149,15 +206,6 @@
         document.getElementById('svgLayer').appendChild(t);
     }
 
-    function getDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371; 
-        const dLat = (lat2-lat1) * Math.PI / 180;
-        const dLon = (lon2-lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    }
-
-    // Run every 2 seconds for smooth altitude tracking [cite: 16]
     setInterval(updateFromXCTrack, 2000);
 </script>
 </body>
