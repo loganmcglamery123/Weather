@@ -5,40 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vertical Profile</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        .card { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 520px; text-align: center; position: relative; }
-        h2 { margin: 0 0 5px 0; color: #333; font-size: 1.4rem; }
-        #coords-header { font-size: 0.8rem; color: #666; margin-bottom: 15px; font-family: monospace; }
+        body { font-family: -apple-system, sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 10px; margin: 0; }
+        .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 500px; text-align: center; position: relative; }
+        h2 { margin: 0 0 5px 0; color: #333; font-size: 1.2rem; }
+        #coords-header { font-size: 0.75rem; color: #666; margin-bottom: 15px; font-family: monospace; }
         .chart-frame { position: relative; height: 600px; width: 60%; margin: 0 auto; border: 2px solid #333; background: #fafafa; margin-bottom: 20px; }
         .clipping-mask { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; z-index: 1; }
         .svg-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none; }
-        .y-axis-label { position: absolute; transform: rotate(-90deg); left: -90px; top: 50%; color: #555; font-weight: bold; font-size: 0.9rem; white-space: nowrap; }
         .wind-block { position: absolute; left: 0; width: 100%; border-top: 1px solid rgba(255,255,255,0.15); transition: opacity 0.2s; }
-        .data-label { position: absolute; left: 0; width: 100%; text-align: center; color: white; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,0.4); font-size: 0.95rem; z-index: 5; transform: translateY(50%); }
+        .data-label { position: absolute; left: 0; width: 100%; text-align: center; color: white; font-weight: 900; text-shadow: 0 1px 3px rgba(0,0,0,0.6); font-size: 0.95rem; z-index: 25; transform: translateY(50%); }
         .alt-tick { position: absolute; left: -65px; width: 60px; text-align: right; font-size: 0.75rem; color: #666; transform: translateY(50%); }
         .temp-tick { position: absolute; right: -60px; width: 50px; text-align: left; font-size: 0.8rem; font-weight: bold; color: #d32f2f; transform: translateY(50%); }
         .grid-line { position: absolute; left: 0; width: 100%; height: 1px; border-top: 1px dashed #ddd; }
-
-        /* LINE STYLES */
-        .freezing-line { stroke: #0066ff; stroke-width: 2; stroke-dasharray: 6,4; }
-        .freezing-label { fill: #0066ff; font-size: 0.7rem; font-weight: bold; }
-        .boundary-line { stroke: #000; stroke-width: 2; }
-        .boundary-label { fill: #000; font-size: 0.7rem; font-weight: bold; }
-        .cloud-line { stroke: #777; stroke-width: 2; stroke-dasharray: 3,3; }
-        .cloud-label { fill: #555; font-size: 0.7rem; font-weight: bold; }
-        .live-alt-line { stroke: #ff00ff; stroke-width: 3; } /* Magenta Live Line */
-        .live-alt-label { fill: #ff00ff; font-size: 0.8rem; font-weight: bold; }
-        
+        .freezing-line { stroke: #0066ff; stroke-width: 2.5; stroke-dasharray: 6,4; }
+        .freezing-label { fill: #0066ff; font-size: 0.75rem; font-weight: bold; }
+        .boundary-line { stroke: #000; stroke-width: 2.5; }
+        .boundary-label { fill: #000; font-size: 0.75rem; font-weight: bold; }
+        .cloud-line { stroke: #777; stroke-width: 2.5; stroke-dasharray: 3,3; }
+        .cloud-label { fill: #555; font-size: 0.75rem; font-weight: bold; }
+        .live-alt-line { stroke: #ff00ff; stroke-width: 3.5; }
+        .live-alt-label { fill: #ff00ff; font-size: 0.85rem; font-weight: bold; }
         .temp-header { position: absolute; right: -70px; top: -25px; font-size: 0.8rem; font-weight: bold; color: #d32f2f; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2 id="main-title">Vertical Profile</h2>
-        <div id="coords-header">Detecting GPS...</div>
+        <h2 id="main-title">Live Vertical Profile</h2>
+        <div id="coords-header">Waiting for GPS...</div>
         <div class="chart-frame" id="chartArea">
-            <span class="y-axis-label">Altitude (ft)</span>
-            <span class="temp-header">Temp (°F)</span>
+            <span class="temp-header">°F</span>
+            <div id="loading" style="padding-top:45%; color:#999;">Loading...</div>
             <div class="clipping-mask" id="chartMask"></div>
             <svg class="svg-layer" id="svgLayer"></svg>
         </div>
@@ -50,55 +46,53 @@
         const svg = document.getElementById('svgLayer');
         const header = document.getElementById('coords-header');
         
-        // 1. Parse Live URL Params
         const params = new URLSearchParams(window.location.search);
         const lat = parseFloat(params.get('lat')) || 35.198;
-        const lon = parseFloat(params.get('lon')) || -111.651;
+        const lon = parseFloat(params.get('lon') || params.get('lng')) || -111.651;
         
-        // alt is usually meters in XCTrack
-        let rawAlt = params.get('alt');
         let currentAltFt = null;
+        let rawAlt = params.get('alt');
         if (rawAlt) {
-            currentAltFt = parseFloat(rawAlt) * 3.28084;
+            // XCTrack sends alt in meters
+            currentAltFt = parseFloat(rawAlt.replace(/[^0-9.-]/g, '')) * 3.28084;
         }
 
-        header.innerText = `LAT: ${lat.toFixed(4)} | LON: ${lon.toFixed(4)} | ALT: ${currentAltFt ? Math.round(currentAltFt) + 'ft' : 'No GPS Alt'}`;
+        header.innerText = `LAT: ${lat.toFixed(4)} | LON: ${lon.toFixed(4)} | ALT: ${currentAltFt ? Math.round(currentAltFt) + 'ft' : '---'}`;
 
         const levels = [1000, 975, 950, 925, 900, 875, 850, 825, 800, 775, 750, 725, 700, 675, 650, 625, 600, 575, 550, 525, 500];
         let hourlyParams = ["freezing_level_height", "boundary_layer_height", "temperature_2m", "dew_point_2m"]; 
-        levels.forEach(l => {
-            hourlyParams.push(`wind_speed_${l}hPa`, `wind_direction_${l}hPa`, `geopotential_height_${l}hPa`, `temperature_${l}hPa`);
-        });
+        levels.forEach(l => hourlyParams.push(`wind_speed_${l}hPa`, `wind_direction_${l}hPa`, `geopotential_height_${l}hPa`, `temperature_${l}hPa`));
         
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=${hourlyParams.join(',')}&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit`;
 
         try {
             const response = await fetch(url);
             const data = await response.json();
+            document.getElementById('loading')?.remove();
 
             const mToFt = 3.28084;
             const surfaceElevation = data.elevation * mToFt; 
             const chartTop = 18000; 
             const tIndex = data.hourly.time.findIndex(t => t.startsWith(new Date().toISOString().slice(0, 13))) || 0;
 
-            const frzFt = data.hourly.freezing_level_height[tIndex] * mToFt;
-            const blMSL = surfaceElevation + (data.hourly.boundary_layer_height[tIndex] * mToFt);
-            const cldMSL = surfaceElevation + (((data.hourly.temperature_2m[tIndex] - data.hourly.dew_point_2m[tIndex]) / 4.4) * 1000);
+            const vH = chartTop - surfaceElevation;
+            const getPct = (alt) => ((alt - surfaceElevation) / vH) * 100;
+
+            // Lines
+            const frz = data.hourly.freezing_level_height[tIndex] * mToFt;
+            const bl = surfaceElevation + (data.hourly.boundary_layer_height[tIndex] * mToFt);
+            const cld = surfaceElevation + (((data.hourly.temperature_2m[tIndex] - data.hourly.dew_point_2m[tIndex]) / 4.4) * 1000);
 
             let points = levels.map(l => ({
                 speed: data.hourly[`wind_speed_${l}hPa`][tIndex],
                 dir: data.hourly[`wind_direction_${l}hPa`][tIndex],
                 alt: data.hourly[`geopotential_height_${l}hPa`][tIndex] * mToFt,
                 temp: data.hourly[`temperature_${l}hPa`][tIndex]
-            })).filter(p => p.speed !== null).sort((a, b) => a.alt - b.alt);
+            })).sort((a, b) => a.alt - b.alt);
 
             mask.innerHTML = ''; svg.innerHTML = '';
             document.querySelectorAll('.alt-tick, .temp-tick, .grid-line, .data-label').forEach(el => el.remove());
 
-            const viewHeight = chartTop - surfaceElevation;
-            const getPct = (alt) => ((alt - surfaceElevation) / viewHeight) * 100;
-
-            // Render Wind Blocks
             points.forEach((p, i) => {
                 const nextAlt = points[i+1] ? points[i+1].alt : chartTop + 2000;
                 const bPct = getPct(p.alt), tPct = getPct(nextAlt), hPct = tPct - bPct;
@@ -107,7 +101,7 @@
                 const block = document.createElement('div');
                 block.className = 'wind-block';
                 block.style.bottom = `${bPct}%`; block.style.height = `${hPct}%`; 
-                block.style.backgroundColor = `hsl(${190 - (p.speed * 3)}, 80%, 45%)`;
+                block.style.backgroundColor = p.speed <= 12 ? '#4caf50' : p.speed <= 22 ? '#ffeb3b' : p.speed <= 32 ? '#ff9800' : '#f44336';
                 mask.appendChild(block);
 
                 const vB = Math.max(bPct, 0), vT = Math.min(tPct, 100);
@@ -119,11 +113,11 @@
                     label.innerHTML = `${Math.round(p.speed)} <span style="display:inline-block; transform:rotate(${p.dir}deg)">↓</span>`;
                     document.getElementById('chartArea').appendChild(label);
 
-                    const tTick = document.createElement('div');
-                    tTick.className = 'temp-tick';
-                    tTick.style.bottom = `${center}%`;
-                    tTick.innerText = Math.round(p.temp) + '°';
-                    document.getElementById('chartArea').appendChild(tTick);
+                    const temp = document.createElement('div');
+                    temp.className = 'temp-tick';
+                    temp.style.bottom = `${center}%`;
+                    temp.innerText = Math.round(p.temp) + '°';
+                    document.getElementById('chartArea').appendChild(temp);
                 }
             });
 
@@ -136,20 +130,19 @@
                 line.setAttribute("class", css);
                 svg.appendChild(line);
                 const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                t.setAttribute("x", "5px"); t.setAttribute("y", `${y - 1}%`); t.setAttribute("class", css.replace('-line', '-label'));
+                t.setAttribute("x", "5px"); t.setAttribute("y", `${y - 1.5}%`); t.setAttribute("class", css.replace('-line', '-label'));
                 t.textContent = txt;
                 svg.appendChild(t);
             }
 
-            drawLine(frzFt, "freezing-line", "FRZ");
-            drawLine(blMSL, "boundary-line", "BNDRY");
-            drawLine(cldMSL, "cloud-line", "CLD BASE");
+            drawLine(frz, "freezing-line", "FREEZING");
+            drawLine(bl, "boundary-line", "BNDRY");
+            drawLine(cld, "cloud-line", "CLOUD BASE");
             if (currentAltFt) drawLine(currentAltFt, "live-alt-line", "YOU");
 
             for (let a = Math.ceil(surfaceElevation/1000)*1000; a <= chartTop; a+=2000) {
-                const pct = getPct(a);
                 const tick = document.createElement('div');
-                tick.className = 'alt-tick'; tick.style.bottom = `${pct}%`; tick.innerText = a;
+                tick.className = 'alt-tick'; tick.style.bottom = `${getPct(a)}%`; tick.innerText = a/1000 + 'k';
                 document.getElementById('chartArea').appendChild(tick);
             }
         } catch (e) { console.error(e); }
