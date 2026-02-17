@@ -3,111 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wind Speed Profile</title>
+    <title>Vertical Wind Profile</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; text-align: center; }
-        .chart-container { position: relative; height: 60vh; width: 90vw; margin: 0 auto; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #f4f4f9; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            padding: 20px;
+        }
+        .container {
+            width: 90%;
+            max-width: 800px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        h2 { margin-top: 0; color: #333; }
+        p { color: #666; font-size: 0.9em; }
     </style>
 </head>
 <body>
 
-    <h1>Wind Speed Forecast</h1>
-    <p>Surface to 18,000ft (if available in API response)</p>
-    
-    <div class="chart-container">
-        <canvas id="windChart"></canvas>
-    </div>
+<div class="container">
+    <h2>Current Vertical Wind Profile</h2>
+    <p>Wind Speed & Direction from Ground to ~18,000ft</p>
+    <canvas id="windProfileChart"></canvas>
+</div>
 
-    <script>
-        async function fetchData() {
-            // I removed your key for safety. Paste it between the quotes below.
-            const apiKey = "YOUR_API_KEY_HERE"; 
+<script>
+    async function fetchAndChart() {
+        const url = "https://api.open-meteo.com/v1/forecast?latitude=44.5101&longitude=-122.969&daily=sunrise,sunset&hourly=wind_speed_1000hPa,wind_speed_975hPa,wind_speed_950hPa,wind_speed_925hPa,wind_speed_900hPa,wind_speed_850hPa,wind_speed_800hPa,wind_speed_700hPa,wind_speed_600hPa,wind_speed_500hPa,wind_direction_1000hPa,wind_direction_975hPa,wind_direction_950hPa,wind_direction_925hPa,wind_direction_900hPa,wind_direction_850hPa,wind_direction_800hPa,wind_direction_700hPa,wind_direction_600hPa,wind_direction_500hPa,geopotential_height_1000hPa,geopotential_height_500hPa,geopotential_height_975hPa,geopotential_height_600hPa,geopotential_height_950hPa,geopotential_height_925hPa,geopotential_height_850hPa,geopotential_height_900hPa,geopotential_height_800hPa,geopotential_height_700hPa&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
+
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+
+            // 1. Find the index for the current hour
+            const now = new Date();
+            // OpenMeteo returns ISO strings (e.g., "2023-10-27T14:00"). 
+            // We just match the current hour.
+            const currentHourISO = now.toISOString().slice(0, 13); // Matches "YYYY-MM-DDTHH"
             
-            // Your specific coordinates and settings
-            const url = `https://my.meteoblue.com/packages/air-15min?apikey=${apiKey}&lat=44.12&lon=-123.214&asl=112&format=json&temperature=F&windspeed=mph&precipitationamount=inch&winddirection=3char&forecast_days=1`;
+            // Find the index in the time array that matches our current hour
+            let timeIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
+            if (timeIndex === -1) timeIndex = 0; // Fallback to first hour if mismatch
 
-            try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+            // 2. Define the pressure levels we want to graph (from ground up)
+            // 1000hPa is roughly surface, 500hPa is roughly 18,000ft
+            const levels = [1000, 975, 950, 925, 900, 850, 800, 700, 600, 500];
+
+            // 3. Build the dataset for the chart
+            const chartData = levels.map(level => {
+                // Construct property names dynamically (e.g., "wind_speed_1000hPa")
+                const speedKey = `wind_speed_${level}hPa`;
+                const dirKey = `wind_direction_${level}hPa`;
+                const heightKey = `geopotential_height_${level}hPa`;
+
+                // Get values at the current time index
+                const speed = data.hourly[speedKey][timeIndex];
+                const direction = data.hourly[dirKey][timeIndex];
+                const heightMeters = data.hourly[heightKey][timeIndex];
                 
-                const json = await response.json();
-                console.log("API Response:", json); // Check this in Console (F12) to see available data
+                // Convert meters to feet
+                const heightFeet = Math.round(heightMeters * 3.28084);
 
-                // Extract Time Labels
-                // The API usually returns 'data_15min' or 'data_1h' depending on the package.
-                // We check both.
-                const dataBlock = json.data_15min || json.data_1h || json.data_day;
-                const timeLabels = dataBlock.time.map(t => new Date(t).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+                return {
+                    x: speed,        // X-Axis: Speed
+                    y: heightFeet,   // Y-Axis: Altitude
+                    d: direction     // Custom data: Direction (accessed in tooltip)
+                };
+            });
 
-                // Setup Datasets
-                // Note: 'air-15min' usually only has 'windspeed'. 
-                // Upper air data often looks like 'windspeed_850hPa' in other packages.
-                // We try to grab what is there.
-                
-                const datasets = [
-                    {
-                        label: 'Surface Wind',
-                        data: dataBlock.windspeed, // The standard surface feed
-                        borderColor: 'blue',
-                        borderWidth: 2,
-                        fill: false
-                    }
-                ];
-
-                // ATTEMPT to add upper levels (18,000ft is approx 500 hPa)
-                // These keys might not exist in your current 'air-15min' package.
-                if (dataBlock.windspeed_500hPa) {
-                    datasets.push({
-                        label: '18,000ft (500hPa)',
-                        data: dataBlock.windspeed_500hPa,
-                        borderColor: 'red',
-                        borderWidth: 2
-                    });
-                }
-                
-                if (dataBlock.windspeed_850hPa) {
-                    datasets.push({
-                        label: '5,000ft (850hPa)',
-                        data: dataBlock.windspeed_850hPa,
-                        borderColor: 'orange',
-                        borderWidth: 2
-                    });
-                }
-
-                renderChart(timeLabels, datasets);
-
-            } catch (error) {
-                console.error(error);
-                document.body.innerHTML += `<p style="color:red">Error: ${error.message}. Check console for details.</p>`;
-            }
-        }
-
-        function renderChart(labels, datasets) {
-            const ctx = document.getElementById('windChart').getContext('2d');
+            // 4. Create the Chart
+            const ctx = document.getElementById('windProfileChart').getContext('2d');
             new Chart(ctx, {
-                type: 'line',
+                type: 'scatter', // Scatter allows us to plot Numbers vs Numbers (Height vs Speed)
                 data: {
-                    labels: labels,
-                    datasets: datasets
+                    datasets: [{
+                        label: 'Wind Profile',
+                        data: chartData,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                        showLine: true, // Connect the dots
+                        tension: 0.4,   // Smooth the line slightly
+                        pointRadius: 6,
+                        pointHoverRadius: 8
+                    }]
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
                     scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: { display: true, text: 'Speed (mph)' }
-                        },
                         x: {
-                            title: { display: true, text: 'Time' }
+                            title: { display: true, text: 'Wind Speed (mph)' },
+                            beginAtZero: true
+                        },
+                        y: {
+                            title: { display: true, text: 'Altitude (ft)' },
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                // Customize tooltip to show Direction
+                                label: function(context) {
+                                    const point = context.raw;
+                                    return `Speed: ${point.x} mph @ ${point.y} ft (Dir: ${point.d}°)`;
+                                }
+                            }
                         }
                     }
                 }
             });
-        }
 
-        fetchData();
-    </script>
+        } catch (err) {
+            console.error("Error fetching weather data:", err);
+            document.querySelector('.container').innerHTML += `<p style="color:red">Error loading data. Check console.</p>`;
+        }
+    }
+
+    fetchAndChart();
+</script>
+
 </body>
 </html>
