@@ -88,25 +88,16 @@
             transform: translateY(50%); 
         }
 
-        /* NEW: Ground Line Styles */
-        .ground-line {
-            position: absolute;
-            width: 100%;
-            border-bottom: 2px dashed #444;
-            z-index: 5;
-            pointer-events: none; /* Let clicks pass through */
-        }
-
         .ground-text {
             position: absolute;
-            right: 5px; /* Stick to right side */
-            background: rgba(255, 255, 255, 0.8);
+            right: 5px;
+            bottom: 5px;
+            background: rgba(255, 255, 255, 0.9);
             padding: 2px 6px;
             border-radius: 4px;
             font-size: 0.75rem;
             color: #333;
             font-weight: bold;
-            transform: translateY(-110%); /* Move slightly above the line */
             z-index: 6;
             pointer-events: none;
         }
@@ -129,7 +120,7 @@
 <script>
     async function initChart() {
         const container = document.getElementById('chartArea');
-        // Flagstaff, AZ coordinates
+        // Using Flagstaff as example, replace with your coords if needed
         const url = "https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651&hourly=wind_speed_1000hPa,wind_speed_975hPa,wind_speed_950hPa,wind_speed_925hPa,wind_speed_900hPa,wind_speed_850hPa,wind_speed_800hPa,wind_speed_700hPa,wind_speed_600hPa,wind_speed_500hPa,geopotential_height_1000hPa,geopotential_height_500hPa,geopotential_height_975hPa,geopotential_height_600hPa,geopotential_height_950hPa,geopotential_height_925hPa,geopotential_height_850hPa,geopotential_height_900hPa,geopotential_height_800hPa,geopotential_height_700hPa&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
 
         try {
@@ -137,10 +128,9 @@
             const data = await response.json();
 
             // 1. Get Surface Elevation 
-            // We convert this specific value to feet so the Label reads correctly in ft
             const surfaceElevation = data.elevation * 3.28084;
             
-            // 2. Get Time Index
+            // 2. Time Index
             const now = new Date();
             const currentHourISO = now.toISOString().slice(0, 13);
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
@@ -157,16 +147,24 @@
             });
 
             // 3. Filter underground points
-            // Using a slight buffer (-100ft) to keep surface data visible
-            points = points.filter(p => p.alt > (surfaceElevation - 100));
-
-            // Sort Low -> High
+            points = points.filter(p => p.alt > (surfaceElevation - 200)); 
             points.sort((a, b) => a.alt - b.alt);
 
-            // Clear and reset axis
             container.innerHTML = '<span class="y-axis-label">Altitude (ft)</span>'; 
             
-            const maxAlt = 20000; 
+            // 4. SCALING LOGIC (Updated to 18,000 ft)
+            const minAlt = surfaceElevation;
+            const maxAlt = 18000; // Capped at 18k ft
+            const totalRange = maxAlt - minAlt;
+
+            // Helper for Percentage Calculation
+            function getPct(altitude) {
+                if (altitude < minAlt) return 0;
+                // Clamp top to 100% so we don't draw outside the box
+                let pct = ((altitude - minAlt) / totalRange) * 100;
+                if (pct > 100) pct = 100;
+                return pct;
+            }
             
             function getColor(s) {
                 let hue = 140 - (s * 4); 
@@ -175,22 +173,30 @@
                 return `hsl(${hue}, 70%, 50%)`;
             }
 
-            // Draw Bars
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
+                // Skip drawing blocks if the point is already above our max cap
+                if (p.alt > maxAlt && i > 0) continue; 
+
                 const nextP = points[i+1];
                 
-                const bottomPct = (p.alt / maxAlt) * 100;
-                
+                // Calculate Scale Position
+                let bottomPct = getPct(p.alt);
+                if (i === 0) bottomPct = 0; // Force bottom to floor
+
                 let topPct;
                 if (nextP) {
-                    topPct = (nextP.alt / maxAlt) * 100;
+                    topPct = getPct(nextP.alt);
                 } else {
-                    topPct = bottomPct + 8; 
+                    topPct = 100; // Last block goes to top
                 }
                 
                 const heightPct = topPct - bottomPct;
+                
+                // If height is 0 (e.g. out of range), skip
+                if (heightPct <= 0) continue;
 
+                // Render Block
                 const block = document.createElement('div');
                 block.className = 'wind-block';
                 block.style.bottom = `${bottomPct}%`;
@@ -198,29 +204,33 @@
                 block.style.backgroundColor = getColor(p.speed);
                 block.innerHTML = `${p.speed}`; 
                 
+                // Render Axis Label
                 const label = document.createElement('div');
                 label.className = 'alt-label';
                 label.style.bottom = `${bottomPct}%`;
-                label.innerText = Math.round(p.alt / 1000) + 'k'; 
+                
+                if (i === 0) {
+                     label.innerText = (minAlt / 1000).toFixed(1) + 'k';
+                } else {
+                     label.innerText = Math.round(p.alt / 1000) + 'k'; 
+                }
 
                 container.appendChild(block);
                 container.appendChild(label);
             }
             
-            // 4. Draw Ground Line & Label
-            const groundPct = (surfaceElevation / maxAlt) * 100;
-            
-            const line = document.createElement('div');
-            line.className = 'ground-line';
-            line.style.bottom = `${groundPct}%`;
-            
+            // Ground Text Indicator
             const text = document.createElement('div');
             text.className = 'ground-text';
-            text.style.bottom = `${groundPct}%`;
             text.innerText = `Ground: ${Math.round(surfaceElevation)} ft`;
-            
-            container.appendChild(line);
             container.appendChild(text);
+            
+            // Top Text Indicator (18k)
+            const topText = document.createElement('div');
+            topText.className = 'alt-label';
+            topText.style.top = '-10px'; // Just above chart
+            topText.innerText = '18k';
+            container.appendChild(topText);
 
         } catch (err) {
             console.error(err);
