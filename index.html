@@ -3,78 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XC Profile HD</title>
+    <title>XC Profile</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 10px; margin: 0; }
-        .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 480px; text-align: center; position: relative; }
+        body { font-family: -apple-system, sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 10px; margin: 0; }
+        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 450px; text-align: center; position: relative; }
         h2 { margin: 0; font-size: 1.2rem; color: #333; }
         #coords-display { font-size: 0.75rem; color: #666; margin-bottom: 10px; }
-        .chart-frame { position: relative; height: 550px; width: 60%; margin: 0 auto; border: 2px solid #333; background: #fafafa; overflow: visible; }
+        .chart-frame { position: relative; height: 500px; width: 65%; margin: 0 auto; border: 2px solid #333; background: #fafafa; }
         .clipping-mask { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; z-index: 1; }
         .svg-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none; }
         .wind-block { position: absolute; left: 0; width: 100%; border-top: 1px solid rgba(255,255,255,0.15); }
-        .data-label { position: absolute; left: 0; width: 100%; text-align: center; color: white; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,0.4); font-size: 0.9rem; z-index: 5; transform: translateY(50%); }
-        .alt-tick { position: absolute; left: -65px; width: 60px; text-align: right; font-size: 0.75rem; color: #666; transform: translateY(50%); font-variant-numeric: tabular-nums; }
-        .temp-tick { position: absolute; right: -60px; width: 50px; text-align: left; font-size: 0.8rem; font-weight: bold; color: #d32f2f; transform: translateY(50%); font-variant-numeric: tabular-nums; }
-        .grid-line { position: absolute; left: 0; width: 100%; height: 1px; border-top: 1px dashed #ddd; z-index: 0; }
-        
-        /* Atmospheric Line Styles */
-        .freezing-line { stroke: #0066ff; stroke-width: 2; stroke-dasharray: 6,4; }
-        .freezing-label { fill: #0066ff; font-size: 0.7rem; font-weight: bold; }
+        .data-label { position: absolute; left: 0; width: 100%; text-align: center; color: white; font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,0.5); font-size: 0.85rem; z-index: 5; transform: translateY(50%); }
+        .alt-tick { position: absolute; left: -55px; width: 50px; text-align: right; font-size: 0.7rem; color: #777; transform: translateY(50%); }
+        .temp-tick { position: absolute; right: -50px; width: 45px; text-align: left; font-size: 0.75rem; font-weight: bold; color: #d32f2f; transform: translateY(50%); }
+        .grid-line { position: absolute; left: 0; width: 100%; height: 1px; border-top: 1px dashed #ddd; }
+
+        /* Line Styles */
+        .freezing-line { stroke: #0066ff; stroke-width: 2; stroke-dasharray: 5,3; }
+        .freezing-label { fill: #0066ff; font-size: 0.65rem; font-weight: bold; }
         .boundary-line { stroke: #000; stroke-width: 2; }
-        .boundary-label { fill: #000; font-size: 0.7rem; font-weight: bold; }
-        .cloud-line { stroke: #777; stroke-width: 2; stroke-dasharray: 3,3; }
-        .cloud-label { fill: #555; font-size: 0.7rem; font-weight: bold; }
+        .boundary-label { fill: #000; font-size: 0.65rem; font-weight: bold; }
+        .cloud-line { stroke: #777; stroke-width: 2; stroke-dasharray: 2,2; }
+        .cloud-label { fill: #555; font-size: 0.65rem; font-weight: bold; }
         
-        /* YOU Line Style */
-        .current-alt-line { stroke: #e91e63; stroke-width: 3; }
-        .current-alt-label { fill: #e91e63; font-size: 0.8rem; font-weight: 900; text-anchor: end; }
-        
-        .temp-header { position: absolute; right: -70px; top: -25px; font-size: 0.8rem; font-weight: bold; color: #d32f2f; }
+        /* Current Alt "YOU" Line */
+        .you-line { stroke: #e91e63; stroke-width: 3; }
+        .you-label { fill: #e91e63; font-size: 0.8rem; font-weight: 900; }
+
+        .loading { padding: 50px; color: #888; font-style: italic; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2 id="main-title">Vertical Profile</h2>
-        <div id="coords-display">Waiting for XCTrack...</div>
+        <h2 id="main-title">Vertical Wind Profile</h2>
+        <div id="coords-display">Detecting...</div>
         <div class="chart-frame" id="chartArea">
-            <span class="alt-tick" style="left: -90px; transform: rotate(-90deg); top: 50%;">Altitude (ft)</span>
-            <span class="temp-header">Temp (°F)</span>
+            <div id="loading" class="loading">Fetching Data...</div>
             <div class="clipping-mask" id="chartMask"></div>
             <svg class="svg-layer" id="svgLayer"></svg>
         </div>
-        <div class="x-axis-wind" style="margin-top: 5px; font-weight: bold; color: #555;">Wind Speed (mph)</div>
     </div>
 
 <script>
-    let currentData = null;
-    const mToFt = 3.28084;
-    const chartTop = 18000;
-
     async function initChart() {
-        // Repeatedly check for location from XCTrack
-        setInterval(async () => {
-            if (typeof XCTrack !== 'undefined' && XCTrack.getLocation) {
-                const xcJson = XCTrack.getLocation(); [cite: 5]
-                if (xcJson && xcJson !== "null") {
-                    const loc = JSON.parse(xcJson); [cite: 6]
-                    if (loc.isValid) { [cite: 7]
-                        // Only re-fetch weather if we haven't yet or if we've moved > 2km
-                        if (!currentData || getDistance(loc.lat, loc.lon, currentData.lat, currentData.lon) > 2) {
-                            await fetchData(loc.lat, loc.lon);
-                        }
-                        
-                        document.getElementById('coords-display').innerText = 
-                            `Lat: ${loc.lat.toFixed(3)} | Lon: ${loc.lon.toFixed(3)} | Alt: ${Math.round(loc.altGps * mToFt)}ft`;
-                        
-                        updateYouLine(loc.altGps * mToFt); [cite: 18]
-                    }
-                }
-            }
-        }, 2000); // Check every 2 seconds
-    }
+        const mask = document.getElementById('chartMask');
+        const svg = document.getElementById('svgLayer');
+        const coordsText = document.getElementById('coords-display');
+        const mToFt = 3.28084;
+        const chartTop = 18000;
+        
+        const params = new URLSearchParams(window.location.search);
+        let lat = params.get('lat');
+        let lon = params.get('lon');
+        let altGps = params.get('alt'); // Meters from XCTrack
 
-    async function fetchData(lat, lon) {
+        if (!lat || !lon) {
+            coordsText.innerText = "URL Error: Missing lat/lon params.";
+            return;
+        }
+
+        coordsText.innerText = `Lat: ${parseFloat(lat).toFixed(3)} | Lon: ${parseFloat(lon).toFixed(3)}`;
+        if (altGps) coordsText.innerText += ` | Alt: ${Math.round(altGps * mToFt)}ft`;
+
         const levels = [1000, 975, 950, 925, 900, 875, 850, 825, 800, 775, 750, 725, 700, 675, 650, 625, 600, 575, 550, 525, 500];
         let hourlyParams = ["freezing_level_height", "boundary_layer_height", "temperature_2m", "dew_point_2m"]; 
         levels.forEach(l => hourlyParams.push(`wind_speed_${l}hPa`, `wind_direction_${l}hPa`, `geopotential_height_${l}hPa`, `temperature_${l}hPa`));
@@ -84,135 +74,97 @@
         try {
             const response = await fetch(url);
             const data = await response.json();
-            currentData = { lat, lon, surfaceElevation: data.elevation * mToFt, data };
-            renderStaticLayers();
-        } catch (e) { console.error(e); }
-    }
+            document.getElementById('loading')?.remove();
 
-    function renderStaticLayers() {
-        const container = document.getElementById('chartArea');
-        const mask = document.getElementById('chartMask');
-        const svg = document.getElementById('svgLayer');
-        const { surfaceElevation, data } = currentData;
-        const viewHeight = chartTop - surfaceElevation;
-        const getAltPct = (alt) => ((alt - surfaceElevation) / viewHeight) * 100;
-        
-        const now = new Date();
-        const hourISO = now.toISOString().slice(0, 13);
-        let tIndex = data.hourly.time.findIndex(t => t.startsWith(hourISO));
-        if (tIndex === -1) tIndex = 0;
+            const surfaceElevation = data.elevation * mToFt;
+            const now = new Date();
+            const hourISO = now.toISOString().slice(0, 13);
+            let tIndex = data.hourly.time.findIndex(t => t.startsWith(hourISO));
+            if (tIndex === -1) tIndex = 0;
 
-        mask.innerHTML = ''; 
-        svg.innerHTML = '';
-        container.querySelectorAll('.alt-tick:not([style*="rotate"]), .temp-tick, .grid-line, .data-label').forEach(el => el.remove());
+            const viewHeight = chartTop - surfaceElevation;
+            const getAltPct = (alt) => ((alt - surfaceElevation) / viewHeight) * 100;
 
-        // Draw Atmosphere Lines
-        drawLine(data.hourly.freezing_level_height[tIndex] * mToFt, "freezing-line", "frz lvl");
-        drawLine(surfaceElevation + (data.hourly.boundary_layer_height[tIndex] * mToFt), "boundary-line", "boundary");
-        drawLine(surfaceElevation + (((data.hourly.temperature_2m[tIndex] - data.hourly.dew_point_2m[tIndex]) / 4.4) * 1000), "cloud-line", "cld base");
+            // Render Wind Blocks
+            let points = levels.map(level => {
+                const s = data.hourly[`wind_speed_${level}hPa`][tIndex];
+                const d = data.hourly[`wind_direction_${level}hPa`][tIndex];
+                const a = data.hourly[`geopotential_height_${level}hPa`][tIndex];
+                const t = data.hourly[`temperature_${level}hPa`][tIndex];
+                return { speed: s, dir: d, alt: a * mToFt, temp: t };
+            }).filter(p => p.speed !== null).sort((a, b) => a.alt - b.alt);
 
-        let points = [1000, 975, 950, 925, 900, 875, 850, 825, 800, 775, 750, 725, 700, 675, 650, 625, 600, 575, 550, 525, 500].map(level => ({
-            speed: data.hourly[`wind_speed_${level}hPa`][tIndex],
-            dir: data.hourly[`wind_direction_${level}hPa`][tIndex],
-            alt: data.hourly[`geopotential_height_${level}hPa`][tIndex] * mToFt,
-            temp: data.hourly[`temperature_${level}hPa`][tIndex]
-        })).filter(p => p.speed !== null).sort((a, b) => a.alt - b.alt);
+            points.forEach((p, i) => {
+                if (p.alt > chartTop + 1000) return;
+                const nextAlt = points[i+1] ? points[i+1].alt : chartTop + 2000;
+                const bottomPct = getAltPct(p.alt);
+                const topPct = getAltPct(nextAlt);
+                const heightPct = topPct - bottomPct;
+                if (topPct < 0 || bottomPct > 100) return;
 
-        points.forEach((p, i) => {
-            const nextAlt = points[i+1] ? points[i+1].alt : chartTop + 1000;
-            const bottomPct = getAltPct(p.alt);
-            const heightPct = getAltPct(nextAlt) - bottomPct;
-            if (bottomPct + heightPct < 0 || bottomPct > 100) return;
+                const block = document.createElement('div');
+                block.className = 'wind-block';
+                block.style.bottom = `${bottomPct}%`;
+                block.style.height = `${heightPct}%`; 
+                block.style.backgroundColor = p.speed <= 15 ? '#4caf50' : p.speed <= 30 ? '#ff9800' : '#f44336';
+                mask.appendChild(block);
 
-            const block = document.createElement('div');
-            block.className = 'wind-block';
-            block.style.bottom = `${bottomPct}%`;
-            block.style.height = `${heightPct}%`; 
-            block.style.backgroundColor = getWindColor(p.speed);
-            mask.appendChild(block);
+                const vBottom = Math.max(bottomPct, 0);
+                const vTop = Math.min(topPct, 100);
+                if (vTop - vBottom > 4.0) {
+                    const center = vBottom + (vTop - vBottom) / 2;
+                    const label = document.createElement('div');
+                    label.className = 'data-label';
+                    label.style.bottom = `${center}%`; 
+                    label.innerHTML = `${Math.round(p.speed)} <span style="display:inline-block; transform:rotate(${p.dir}deg)">↓</span>`;
+                    document.getElementById('chartArea').appendChild(label);
 
-            if (heightPct > 4.0) {
-                const center = bottomPct + (heightPct / 2);
-                const label = document.createElement('div');
-                label.className = 'data-label';
-                label.style.bottom = `${center}%`; 
-                label.innerHTML = `${Math.round(p.speed)} <span style="display:inline-block; transform:rotate(${p.dir}deg)">↓</span>`;
-                container.appendChild(label);
+                    const tTick = document.createElement('div');
+                    tTick.className = 'temp-tick';
+                    tTick.style.bottom = `${center}%`;
+                    tTick.innerText = Math.round(p.temp) + '°';
+                    document.getElementById('chartArea').appendChild(tTick);
+                }
+            });
 
-                const tTick = document.createElement('div');
-                tTick.className = 'temp-tick';
-                tTick.style.bottom = `${center}%`;
-                tTick.innerText = Math.round(p.temp) + '°';
-                container.appendChild(tTick);
+            function drawLine(alt, css, txt) {
+                const pct = getAltPct(alt);
+                if (pct < 0 || pct > 100) return;
+                const y = 100 - pct;
+                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                line.setAttribute("x1", "0%"); line.setAttribute("x2", "100%"); line.setAttribute("y1", `${y}%`); line.setAttribute("y2", `${y}%`);
+                line.setAttribute("class", css);
+                svg.appendChild(line);
+                const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                t.setAttribute("x", "5px"); t.setAttribute("y", `${y - 1}%`); t.setAttribute("class", css.replace('-line', '-label'));
+                t.textContent = txt;
+                svg.appendChild(t);
             }
-        });
 
-        for (let a = Math.ceil(surfaceElevation/1000)*1000; a <= chartTop; a+=2000) {
-            const pct = getAltPct(a);
-            const tick = document.createElement('div');
-            tick.className = 'alt-tick';
-            tick.style.bottom = `${pct}%`;
-            tick.innerText = a/1000 + 'k';
-            const grid = document.createElement('div');
-            grid.className = 'grid-line';
-            grid.style.bottom = `${pct}%`;
-            container.appendChild(tick);
-            container.appendChild(grid);
-        }
+            drawLine(data.hourly.freezing_level_height[tIndex] * mToFt, "freezing-line", "FREEZING");
+            drawLine(surfaceElevation + (data.hourly.boundary_layer_height[tIndex] * mToFt), "boundary-line", "BOUNDARY");
+            drawLine(surfaceElevation + (((data.hourly.temperature_2m[tIndex] - data.hourly.dew_point_2m[tIndex]) / 4.4) * 1000), "cloud-line", "CLOUD BASE");
+            
+            // Draw "YOU" Line
+            if (altGps) {
+                drawLine(altGps * mToFt, "you-line", "YOU");
+            }
+
+            for (let a = Math.ceil(surfaceElevation/1000)*1000; a <= chartTop; a+=2000) {
+                const pct = getAltPct(a);
+                if (pct < 3.5) continue;
+                const tick = document.createElement('div');
+                tick.className = 'alt-tick';
+                tick.style.bottom = `${pct}%`;
+                tick.innerText = a/1000 + 'k';
+                const grid = document.createElement('div');
+                grid.className = 'grid-line';
+                grid.style.bottom = `${pct}%`;
+                document.getElementById('chartArea').appendChild(tick);
+                document.getElementById('chartArea').appendChild(grid);
+            }
+        } catch (e) { coordsText.innerText = "Fetch Error."; }
     }
-
-    function updateYouLine(altFt) {
-        const svg = document.getElementById('svgLayer');
-        svg.querySelectorAll('.current-alt-line, .current-alt-label').forEach(e => e.remove());
-        if (!currentData) return;
-
-        const pct = ((altFt - currentData.surfaceElevation) / (chartTop - currentData.surfaceElevation)) * 100;
-        if (pct < 0 || pct > 100) return;
-        
-        const yPos = 100 - pct;
-        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute("x1", "0%"); line.setAttribute("x2", "100%"); 
-        line.setAttribute("y1", `${yPos}%`); line.setAttribute("y2", `${yPos}%`);
-        line.setAttribute("class", "current-alt-line");
-        svg.appendChild(line);
-
-        const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        t.setAttribute("x", "98%"); t.setAttribute("y", `${yPos - 1}%`); 
-        t.setAttribute("class", "current-alt-label");
-        t.textContent = "YOU";
-        svg.appendChild(t);
-    }
-
-    function drawLine(alt, css, txt) {
-        const pct = ((alt - currentData.surfaceElevation) / (chartTop - currentData.surfaceElevation)) * 100;
-        if (pct < 0 || pct > 100) return;
-        const yPos = 100 - pct;
-        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute("x1", "0%"); line.setAttribute("x2", "100%"); 
-        line.setAttribute("y1", `${yPos}%`); line.setAttribute("y2", `${yPos}%`);
-        line.setAttribute("class", css);
-        document.getElementById('svgLayer').appendChild(line);
-        const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        t.setAttribute("x", "2px"); t.setAttribute("y", `${yPos - 1}%`); t.setAttribute("class", css.replace('-line', '-label'));
-        t.textContent = txt;
-        document.getElementById('svgLayer').appendChild(t);
-    }
-
-    function getWindColor(s) {
-        if (s <= 10) return "hsl(190, 80%, 45%)";
-        if (s <= 25) return "hsl(120, 75%, 40%)";
-        if (s <= 40) return "hsl(45, 95%, 50%)";
-        return "hsl(10, 100%, 50%)";
-    }
-
-    function getDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371; 
-        const dLat = (lat2-lat1) * Math.PI / 180;
-        const dLon = (lon2-lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    }
-
     initChart();
 </script>
 </body>
