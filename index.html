@@ -382,16 +382,17 @@
           t.style.fontWeight = "900";
         
           const emojiStr = count > 1 ? emoji.repeat(count) : emoji;
-          const altStr = showAltFt ? ` (${Math.round(altFtMSL)}ft)` : "";
-          t.textContent = `${emojiStr}${altStr}`;
+          // const altStr = showAltFt ? ` (${Math.round(altFtMSL)}ft)` : "";
+          //t.textContent = `${emojiStr} ${altStr}`;
+          t.textContent = `${emojiStr};
         
           svg.appendChild(t);
         }
         
         // Replace your old drawLine calls with these:
-        drawEmojiMarker(freezingLevelFt, "freezing-label", "❄️", 3, true);
-        drawEmojiMarker(blHeightMSL, "boundary-label", "🚀", 3, true);
-        drawEmojiMarker(cloudBaseMSL, "cloud-label", "☁️", 3, true);
+        drawEmojiMarker(freezingLevelFt, "freezing-label", "❄️", 10, true);
+        drawEmojiMarker(blHeightMSL, "boundary-label", "🚀", 10, true);
+        drawEmojiMarker(cloudBaseMSL, "cloud-label", "☁️", 10, true);
         
         // Current elev: single paraglider + alt
         if (Number.isFinite(currentElevationFt)) {
