@@ -3,12 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XC Profile</title>
+    <title>XC Profile Debug</title>
     <style>
         body { font-family: -apple-system, sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 10px; margin: 0; }
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 450px; text-align: center; }
-        h2 { margin: 0; font-size: 1.2rem; color: #333; }
-        #coords-display { font-size: 0.75rem; color: #666; margin-bottom: 10px; }
+        
+        /* Debug Styling */
+        #debug-panel { 
+            background: #222; color: #0f0; font-family: monospace; font-size: 0.65rem; 
+            padding: 8px; margin-bottom: 10px; border-radius: 6px; text-align: left; overflow-x: auto;
+        }
+        
         .chart-frame { position: relative; height: 500px; width: 65%; margin: 0 auto; border: 2px solid #333; background: #fafafa; }
         .clipping-mask { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; z-index: 1; }
         .svg-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20; pointer-events: none; }
@@ -17,46 +22,55 @@
         .alt-tick { position: absolute; left: -55px; width: 50px; text-align: right; font-size: 0.7rem; color: #777; transform: translateY(50%); }
         .temp-tick { position: absolute; right: -50px; width: 45px; text-align: left; font-size: 0.75rem; font-weight: bold; color: #d32f2f; transform: translateY(50%); }
         .grid-line { position: absolute; left: 0; width: 100%; height: 1px; border-top: 1px dashed #ddd; }
+
+        /* Lines */
         .freezing-line { stroke: #0066ff; stroke-width: 2; stroke-dasharray: 5,3; }
-        .freezing-label { fill: #0066ff; font-size: 0.65rem; font-weight: bold; }
         .boundary-line { stroke: #000; stroke-width: 2; }
-        .boundary-label { fill: #000; font-size: 0.65rem; font-weight: bold; }
         .cloud-line { stroke: #777; stroke-width: 2; stroke-dasharray: 2,2; }
-        .cloud-label { fill: #555; font-size: 0.65rem; font-weight: bold; }
-        .you-line { stroke: #e91e63; stroke-width: 3; }
-        .you-label { fill: #e91e63; font-size: 0.8rem; font-weight: 900; text-anchor: end; }
+        .you-line { stroke: #e91e63; stroke-width: 4; }
+        .you-label { fill: #e91e63; font-size: 0.85rem; font-weight: 900; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2 id="main-title">Vertical Wind Profile</h2>
-        <div id="coords-display">Waiting for URL params...</div>
+        <div id="debug-panel">Waiting for URL parameters...</div>
         <div class="chart-frame" id="chartArea">
             <div class="clipping-mask" id="chartMask"></div>
             <svg class="svg-layer" id="svgLayer"></svg>
         </div>
     </div>
+
 <script>
     async function initChart() {
         const mask = document.getElementById('chartMask');
         const svg = document.getElementById('svgLayer');
-        const coordsText = document.getElementById('coords-display');
+        const debug = document.getElementById('debug-panel');
         const mToFt = 3.28084;
         const chartTop = 18000;
         
+        // 1. CAPTURE AND LOG PARAMS
         const params = new URLSearchParams(window.location.search);
         let lat = params.get('lat');
         let lon = params.get('lon');
-        let altRaw = params.get('alt'); // altGps in meters [cite: 18, 6]
+        let altRaw = params.get('alt');
+
+        debug.innerHTML = `RAW URL PARAMS:<br>lat: ${lat}<br>lon: ${lon}<br>alt: ${altRaw}`;
 
         if (!lat || !lon) {
-            coordsText.innerText = "Error: lat/lon missing from URL.";
+            debug.style.color = "red";
+            debug.innerHTML += "<br>ERROR: Missing lat or lon!";
             return;
         }
 
-        const altFt = altRaw ? parseFloat(altRaw) * mToFt : null;
-        coordsText.innerText = `Lat: ${parseFloat(lat).toFixed(3)} | Lon: ${parseFloat(lon).toFixed(3)}`;
-        if (altFt) coordsText.innerText += ` | Alt: ${Math.round(altFt)}ft`;
+        // Parse Altitude - remove any non-numeric characters if XCTrack is sending units
+        let cleanAlt = altRaw ? parseFloat(altRaw.replace(/[^\d.-]/g, '')) : null;
+        const altFt = cleanAlt !== null ? cleanAlt * mToFt : null;
+
+        if (altFt !== null) {
+            debug.innerHTML += `<br>PROCESSED ALT: ${Math.round(altFt)} ft`;
+        } else {
+            debug.innerHTML += "<br>PROCESSED ALT: Not found / Invalid";
+        }
 
         const levels = [1000, 975, 950, 925, 900, 875, 850, 825, 800, 775, 750, 725, 700, 675, 650, 625, 600, 575, 550, 525, 500];
         let hourlyParams = ["freezing_level_height", "boundary_layer_height", "temperature_2m", "dew_point_2m"]; 
@@ -76,6 +90,7 @@
             const viewHeight = chartTop - surfaceElevation;
             const getAltPct = (alt) => ((alt - surfaceElevation) / viewHeight) * 100;
 
+            // Render Wind
             let points = levels.map(level => ({
                 speed: data.hourly[`wind_speed_${level}hPa`][tIndex],
                 dir: data.hourly[`wind_direction_${level}hPa`][tIndex],
@@ -95,20 +110,6 @@
                 block.style.height = `${heightPct}%`; 
                 block.style.backgroundColor = p.speed <= 15 ? '#4caf50' : p.speed <= 30 ? '#ff9800' : '#f44336';
                 mask.appendChild(block);
-
-                if (heightPct > 4.0) {
-                    const center = bottomPct + (heightPct / 2);
-                    const label = document.createElement('div');
-                    label.className = 'data-label';
-                    label.style.bottom = `${center}%`; 
-                    label.innerHTML = `${Math.round(p.speed)} <span style="display:inline-block; transform:rotate(${p.dir}deg)">↓</span>`;
-                    document.getElementById('chartArea').appendChild(label);
-                    const tTick = document.createElement('div');
-                    tTick.className = 'temp-tick';
-                    tTick.style.bottom = `${center}%`;
-                    tTick.innerText = Math.round(p.temp) + '°';
-                    document.getElementById('chartArea').appendChild(tTick);
-                }
             });
 
             function drawLine(alt, css, txt, isRight) {
@@ -120,8 +121,9 @@
                 line.setAttribute("class", css);
                 svg.appendChild(line);
                 const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                t.setAttribute("x", isRight ? "98%" : "5px"); t.setAttribute("y", `${y - 1}%`); t.setAttribute("class", css.replace('-line', '-label'));
-                if (isRight) t.setAttribute("style", "text-anchor: end;");
+                t.setAttribute("x", isRight ? "98%" : "5px"); t.setAttribute("y", `${y - 1}%`);
+                if (isRight) t.setAttribute("style", "text-anchor: end; font-weight: bold;");
+                t.setAttribute("class", css.replace('-line', '-label'));
                 t.textContent = txt;
                 svg.appendChild(t);
             }
@@ -129,21 +131,22 @@
             drawLine(data.hourly.freezing_level_height[tIndex] * mToFt, "freezing-line", "FREEZING", false);
             drawLine(surfaceElevation + (data.hourly.boundary_layer_height[tIndex] * mToFt), "boundary-line", "BOUNDARY", false);
             drawLine(surfaceElevation + (((data.hourly.temperature_2m[tIndex] - data.hourly.dew_point_2m[tIndex]) / 4.4) * 1000), "cloud-line", "CLOUD BASE", false);
-            if (altFt) drawLine(altFt, "you-line", "YOU", true);
+            
+            // Draw "YOU" Line if altitude exists
+            if (altFt !== null) {
+                drawLine(altFt, "you-line", "YOU", true);
+            }
 
+            // Ticks
             for (let a = Math.ceil(surfaceElevation/1000)*1000; a <= chartTop; a+=2000) {
                 const pct = getAltPct(a);
                 const tick = document.createElement('div');
                 tick.className = 'alt-tick';
                 tick.style.bottom = `${pct}%`;
                 tick.innerText = a/1000 + 'k';
-                const grid = document.createElement('div');
-                grid.className = 'grid-line';
-                grid.style.bottom = `${pct}%`;
                 document.getElementById('chartArea').appendChild(tick);
-                document.getElementById('chartArea').appendChild(grid);
             }
-        } catch (e) { console.error(e); }
+        } catch (e) { debug.innerHTML += "<br>FETCH ERROR: " + e; }
     }
     initChart();
 </script>
