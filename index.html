@@ -363,36 +363,41 @@
         });
 
         // Add icons to line labels (emoji are simplest + work offline)
-        function drawLine(altFtMSL, css, txt, icon) {
+        // Emoji-only marker (no horizontal line)
+        function drawEmojiMarker(altFtMSL, css, emoji, count, showAltFt, xPx = 6) {
           if (!Number.isFinite(altFtMSL)) return;
           const pct = getAltPct(altFtMSL);
           if (pct < 0 || pct > 100) return;
-
+        
           const yPos = 100 - pct;
-
-          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-          line.setAttribute("x1", "0%");
-          line.setAttribute("x2", "100%");
-          line.setAttribute("y1", `${yPos}%`);
-          line.setAttribute("y2", `${yPos}%`);
-          line.setAttribute("class", css);
-          svg.appendChild(line);
-
+        
           const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-          t.setAttribute("x", "5px");
-          t.setAttribute("y", `${yPos - 1}%`);
-          t.setAttribute("class", css.replace('-line', '-label'));
-          t.textContent = `${icon} ${txt}`;
+          t.setAttribute("x", `${xPx}px`);
+          t.setAttribute("y", `${yPos}%`);
+          t.setAttribute("class", css);           // reuse your existing label colors if you want
+          t.setAttribute("dominant-baseline", "middle");
+        
+          // Make emojis bigger here:
+          t.style.fontSize = "18px";              // <-- increase/decrease
+          t.style.fontWeight = "900";
+        
+          const emojiStr = count > 1 ? emoji.repeat(count) : emoji;
+          const altStr = showAltFt ? ` (${Math.round(altFtMSL)}ft)` : "";
+          t.textContent = `${emojiStr}${altStr}`;
+        
           svg.appendChild(t);
         }
-
-        drawLine(freezingLevelFt, "freezing-line", "FREEZING", "❄️");
-        drawLine(blHeightMSL, "boundary-line", "BOUNDARY", "🚀");
-        drawLine(cloudBaseMSL, "cloud-line", "CLOUD BASE", "☁️");
-
+        
+        // Replace your old drawLine calls with these:
+        drawEmojiMarker(freezingLevelFt, "freezing-label", "❄️", 3, true);
+        drawEmojiMarker(blHeightMSL, "boundary-label", "🚀", 3, true);
+        drawEmojiMarker(cloudBaseMSL, "cloud-label", "☁️", 3, true);
+        
+        // Current elev: single paraglider + alt
         if (Number.isFinite(currentElevationFt)) {
-          drawLine(currentElevationFt, "elev-line", `CURRENT ELEV (${Math.round(currentElevationFt)} ft)`, "🪂");
+          drawEmojiMarker(currentElevationFt, "elev-label", "🪂", 1, true);
         }
+
 
         // Ticks
         for (let a = Math.ceil(surfaceElevationFt / 1000) * 1000; a <= chartTop; a += 1000) {
