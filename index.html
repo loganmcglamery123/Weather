@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wind Profile Heatmap</title>
+    <title>Vertical Wind Profile</title>
     <style>
         body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
             background: #f0f2f5; 
             display: flex; 
             flex-direction: column; 
@@ -19,28 +19,29 @@
             padding: 30px;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 320px;
+            width: 340px;
             text-align: center;
         }
 
-        h2 { margin: 0 0 10px 0; color: #333; font-size: 1.2rem; }
-        p { color: #666; margin: 0 0 20px 0; font-size: 0.9rem; }
+        h2 { margin: 0 0 5px 0; color: #333; font-size: 1.4rem; }
+        p { color: #666; margin: 0 0 25px 0; font-size: 0.9rem; }
 
         .profile-container {
             position: relative;
             height: 600px; 
-            width: 85%;
-            margin-left: 15%;
+            width: 80%;
+            margin-left: 20%; /* Space for axis labels */
             border-left: 2px solid #333;
             border-bottom: 2px solid #333;
             background: #fafafa;
             margin-bottom: 20px;
+            overflow: hidden; /* Important: Crops the bars that go 'underground' */
         }
 
         .y-axis-label {
             position: absolute;
             transform: rotate(-90deg);
-            left: -85px;
+            left: -90px;
             top: 50%;
             color: #555;
             font-weight: bold;
@@ -65,14 +66,14 @@
             color: white;
             font-weight: bold;
             text-shadow: 0 1px 3px rgba(0,0,0,0.3);
-            font-size: 0.9rem;
-            transition: all 0.3s ease;
+            font-size: 1rem;
             box-sizing: border-box;
-            border-bottom: 1px solid rgba(255,255,255,0.1); 
+            border-bottom: 1px solid rgba(255,255,255,0.2); 
+            transition: transform 0.2s;
         }
         
         .wind-block:hover {
-            width: 110%;
+            transform: scaleX(1.05);
             z-index: 10;
             box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
             cursor: pointer;
@@ -80,25 +81,36 @@
 
         .alt-label {
             position: absolute;
-            left: -50px;
-            font-size: 0.75rem;
-            color: #777;
-            width: 45px;
+            left: -55px;
+            font-size: 0.8rem;
+            color: #666;
+            width: 50px;
             text-align: right;
-            transform: translateY(50%); 
+            transform: translateY(50%); /* Center vertically on the tick */
+            font-feature-settings: "tnum";
+            font-variant-numeric: tabular-nums;
         }
 
-        .ground-text {
+        .ground-line {
+            position: absolute;
+            width: 100%;
+            border-bottom: 2px dashed #333;
+            z-index: 20;
+            bottom: 0; /* Pinned to bottom */
+        }
+
+        .ground-badge {
             position: absolute;
             right: 5px;
             bottom: 5px;
             background: rgba(255, 255, 255, 0.9);
-            padding: 2px 6px;
+            padding: 4px 8px;
             border-radius: 4px;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             color: #333;
             font-weight: bold;
-            z-index: 6;
+            z-index: 21;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             pointer-events: none;
         }
     </style>
@@ -120,17 +132,19 @@
 <script>
     async function initChart() {
         const container = document.getElementById('chartArea');
-        // Using Flagstaff as example, replace with your coords if needed
+        
+        // Flagstaff, AZ
         const url = "https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651&hourly=wind_speed_1000hPa,wind_speed_975hPa,wind_speed_950hPa,wind_speed_925hPa,wind_speed_900hPa,wind_speed_850hPa,wind_speed_800hPa,wind_speed_700hPa,wind_speed_600hPa,wind_speed_500hPa,geopotential_height_1000hPa,geopotential_height_500hPa,geopotential_height_975hPa,geopotential_height_600hPa,geopotential_height_950hPa,geopotential_height_925hPa,geopotential_height_850hPa,geopotential_height_900hPa,geopotential_height_800hPa,geopotential_height_700hPa&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
 
         try {
             const response = await fetch(url);
             const data = await response.json();
 
-            // 1. Get Surface Elevation 
-            const surfaceElevation = data.elevation * 3.28084;
+            // 1. Config
+            const surfaceElevation = data.elevation * 3.28084; // Meters -> Feet
+            const maxChartAlt = 19000; // Increased to 19k so the 18k block fits comfortably
             
-            // 2. Time Index
+            // 2. Get Time
             const now = new Date();
             const currentHourISO = now.toISOString().slice(0, 13);
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
@@ -139,31 +153,42 @@
             const levels = [1000, 975, 950, 925, 900, 850, 800, 700, 600, 500];
             
             let points = levels.map(level => {
-                const altValue = data.hourly[`geopotential_height_${level}hPa`][tIndex];
                 return {
                     speed: data.hourly[`wind_speed_${level}hPa`][tIndex],
-                    alt: altValue 
+                    alt: data.hourly[`geopotential_height_${level}hPa`][tIndex]
                 };
             });
-
-            // 3. Filter underground points
-            points = points.filter(p => p.alt > (surfaceElevation - 200)); 
             points.sort((a, b) => a.alt - b.alt);
 
+            // 3. INTELLIGENT FILTERING
+            // We want to keep the first point that is BELOW ground (so we can fill the gap up to the first air layer)
+            // And we want to keep the first point ABOVE maxAlt (so we can fill the gap up to the top)
+            
+            let filteredPoints = [];
+            
+            // Find index of the first point above ground
+            const firstAboveGroundIndex = points.findIndex(p => p.alt > surfaceElevation);
+            
+            // If there is a point below ground (e.g., 800hPa at 6400ft), include it!
+            // It will be our "foundation" block.
+            let startIndex = (firstAboveGroundIndex > 0) ? firstAboveGroundIndex - 1 : 0;
+            
+            for (let i = startIndex; i < points.length; i++) {
+                filteredPoints.push(points[i]);
+                // Stop adding points once we are comfortably above the chart top
+                if (points[i].alt > maxChartAlt) break;
+            }
+            points = filteredPoints;
+
+            // 4. RENDER
             container.innerHTML = '<span class="y-axis-label">Altitude (ft)</span>'; 
             
-            // 4. SCALING LOGIC (Updated to 18,000 ft)
-            const minAlt = surfaceElevation;
-            const maxAlt = 18000; // Capped at 18k ft
-            const totalRange = maxAlt - minAlt;
+            const totalRange = maxChartAlt - surfaceElevation;
 
-            // Helper for Percentage Calculation
+            // Helper: Converts Altitude to % Position relative to the Chart Box
             function getPct(altitude) {
-                if (altitude < minAlt) return 0;
-                // Clamp top to 100% so we don't draw outside the box
-                let pct = ((altitude - minAlt) / totalRange) * 100;
-                if (pct > 100) pct = 100;
-                return pct;
+                // (Value - Min) / Range * 100
+                return ((altitude - surfaceElevation) / totalRange) * 100;
             }
             
             function getColor(s) {
@@ -175,62 +200,67 @@
 
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
-                // Skip drawing blocks if the point is already above our max cap
-                if (p.alt > maxAlt && i > 0) continue; 
-
                 const nextP = points[i+1];
                 
-                // Calculate Scale Position
+                // Calculate Bottom of this block
                 let bottomPct = getPct(p.alt);
-                if (i === 0) bottomPct = 0; // Force bottom to floor
-
+                
+                // Calculate Top of this block
                 let topPct;
                 if (nextP) {
                     topPct = getPct(nextP.alt);
                 } else {
-                    topPct = 100; // Last block goes to top
+                    // For the highest block (500hPa), give it arbitrary height or cap at 100%
+                    topPct = 100; 
                 }
+
+                // VISUAL CLAMPING
+                // If the block starts underground (negative %), allow it, but CSS 'overflow:hidden' will crop it.
+                // However, for the text label, we want it visible.
                 
+                // The actual div height math:
                 const heightPct = topPct - bottomPct;
                 
-                // If height is 0 (e.g. out of range), skip
-                if (heightPct <= 0) continue;
+                // Don't draw blocks completely out of view
+                if (topPct < 0) continue; 
+                if (bottomPct > 100) continue;
 
-                // Render Block
+                // Create Block
                 const block = document.createElement('div');
                 block.className = 'wind-block';
                 block.style.bottom = `${bottomPct}%`;
-                block.style.height = `${heightPct + 0.5}%`; 
+                block.style.height = `${heightPct}%`; 
                 block.style.backgroundColor = getColor(p.speed);
-                block.innerHTML = `${p.speed}`; 
+                block.innerText = p.speed;
                 
-                // Render Axis Label
+                // Create Axis Label
                 const label = document.createElement('div');
                 label.className = 'alt-label';
                 label.style.bottom = `${bottomPct}%`;
                 
-                if (i === 0) {
-                     label.innerText = (minAlt / 1000).toFixed(1) + 'k';
-                } else {
-                     label.innerText = Math.round(p.alt / 1000) + 'k'; 
+                // Smart Labeling
+                // If point is underground (800hPa), don't label it "6.4k" because that looks confusing below the "Ground" line.
+                // Only label points that are visually inside the chart area (> 0%)
+                if (bottomPct >= 0) {
+                     label.innerText = (p.alt / 1000).toFixed(1) + 'k';
+                     container.appendChild(label);
                 }
 
                 container.appendChild(block);
-                container.appendChild(label);
             }
             
-            // Ground Text Indicator
-            const text = document.createElement('div');
-            text.className = 'ground-text';
-            text.innerText = `Ground: ${Math.round(surfaceElevation)} ft`;
-            container.appendChild(text);
-            
-            // Top Text Indicator (18k)
-            const topText = document.createElement('div');
-            topText.className = 'alt-label';
-            topText.style.top = '-10px'; // Just above chart
-            topText.innerText = '18k';
-            container.appendChild(topText);
+            // Ground Badge
+            const badge = document.createElement('div');
+            badge.className = 'ground-badge';
+            badge.innerText = `Ground: ${Math.round(surfaceElevation)} ft`;
+            container.appendChild(badge);
+
+            // Top Label (18k / 19k)
+            const topLabel = document.createElement('div');
+            topLabel.className = 'alt-label';
+            topLabel.style.top = '-10px';
+            topLabel.innerText = (maxChartAlt / 1000) + 'k';
+            container.appendChild(topLabel);
 
         } catch (err) {
             console.error(err);
