@@ -26,7 +26,7 @@
         h2 { margin: 0 0 5px 0; color: #333; font-size: 1.4rem; }
         p { color: #666; margin: 0 0 25px 0; font-size: 0.9rem; }
 
-        /* Chart Frame */
+        /* Main Frame - NO overflow hidden here, so labels can stick out */
         .chart-frame {
             position: relative;
             height: 600px; 
@@ -36,8 +36,14 @@
             border-bottom: 2px solid #333;
             background: #fafafa;
             margin-bottom: 20px;
-            /* This is the magic: it hides anything drawn below ground or above 18k */
+        }
+
+        /* Inner Mask - This cuts off the bars that go underground */
+        .clipping-mask {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
             overflow: hidden; 
+            z-index: 1; /* Bars sit here */
         }
 
         .y-axis-label {
@@ -71,7 +77,6 @@
             text-shadow: 0 1px 2px rgba(0,0,0,0.4);
             font-size: 1rem;
             box-sizing: border-box;
-            /* Thin line to show where the data point actually changes */
             border-top: 1px dotted rgba(255,255,255,0.4); 
             transition: opacity 0.2s;
         }
@@ -81,41 +86,26 @@
             cursor: crosshair;
         }
         
-        /* The number inside the block */
-        .block-value {
-            z-index: 2;
-        }
-
-        /* Altitude Ticks (Y-Axis) */
+        /* Altitude Ticks (Y-Axis) - Now visible because parent isn't clipping */
         .alt-tick {
             position: absolute;
-            left: -65px; /* Outside the chart */
+            left: -65px; 
             width: 60px;
             text-align: right;
             font-size: 0.75rem;
             color: #666;
             transform: translateY(50%); /* Center on the line */
+            z-index: 5; /* Sit above mask */
         }
         
-        /* Dashed line connecting tick to block boundary */
         .grid-line {
             position: absolute;
             left: 0;
             width: 100%;
             height: 1px;
             border-top: 1px dashed #ddd;
-            z-index: 0;
+            z-index: 2;
             pointer-events: none;
-        }
-
-        /* Ground Overlay */
-        .ground-marker {
-            position: absolute;
-            bottom: 0;
-            width: 100%;
-            height: 0px; 
-            border-bottom: 2px dashed #333;
-            z-index: 10;
         }
         
         .ground-badge {
@@ -142,8 +132,8 @@
 
         <div class="chart-frame" id="chartArea">
             <span class="y-axis-label">Altitude (ft)</span>
-            <div style="padding-top: 50%; color: #888;">Loading...</div>
-        </div>
+            <div class="clipping-mask" id="chartMask"></div>
+            </div>
 
         <div class="x-axis-label">Wind Speed (mph)</div>
     </div>
@@ -151,8 +141,9 @@
 <script>
     async function initChart() {
         const container = document.getElementById('chartArea');
+        const mask = document.getElementById('chartMask');
         
-        // Flagstaff, AZ coordinates for testing
+        // Flagstaff, AZ coordinates
         const url = "https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651&hourly=wind_speed_1000hPa,wind_speed_975hPa,wind_speed_950hPa,wind_speed_925hPa,wind_speed_900hPa,wind_speed_850hPa,wind_speed_800hPa,wind_speed_700hPa,wind_speed_600hPa,wind_speed_500hPa,geopotential_height_1000hPa,geopotential_height_500hPa,geopotential_height_975hPa,geopotential_height_600hPa,geopotential_height_950hPa,geopotential_height_925hPa,geopotential_height_850hPa,geopotential_height_900hPa,geopotential_height_800hPa,geopotential_height_700hPa&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
 
         try {
@@ -160,8 +151,8 @@
             const data = await response.json();
 
             // 1. Setup Constants
-            const surfaceElevation = data.elevation * 3.28084; // Ground Level in Feet
-            const chartTop = 18000; // Top of chart in Feet
+            const surfaceElevation = data.elevation * 3.28084; 
+            const chartTop = 18000; 
             
             // 2. Get Time Index
             const now = new Date();
@@ -169,29 +160,28 @@
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
             if (tIndex === -1) tIndex = 0;
 
-            // 3. Define all possible levels we want to check
+            // 3. Define levels
             const levels = [1000, 975, 950, 925, 900, 850, 800, 700, 600, 500];
             
-            // 4. Build Data Points
             let points = levels.map(level => {
                 return {
-                    level: level, // e.g. 850
+                    level: level, 
                     speed: data.hourly[`wind_speed_${level}hPa`][tIndex],
-                    alt: data.hourly[`geopotential_height_${level}hPa`][tIndex] // Raw feet (or meters if API changes, but current setup assumes units)
+                    alt: data.hourly[`geopotential_height_${level}hPa`][tIndex] 
                 };
             });
-            // Sort lowest altitude to highest
             points.sort((a, b) => a.alt - b.alt);
 
-            // 5. Render Prep
-            container.innerHTML = '<span class="y-axis-label">Altitude (ft)</span>'; 
-            
-            // The chart view range is strictly Ground -> 18k
+            // 4. Render Prep
+            // Only clear the mask (bars), keep the static label in container
+            mask.innerHTML = ''; 
+            // Remove old dynamic ticks from container if re-running
+            const oldTicks = container.querySelectorAll('.alt-tick:not(.static), .grid-line');
+            oldTicks.forEach(el => el.remove());
+
             const viewHeight = chartTop - surfaceElevation;
 
-            // Helper: Convert Feet to Percentage relative to the VIEWPORT
             function getPct(altitude) {
-                // Example: If alt is 6000 (below ground 7000), result is negative %
                 return ((altitude - surfaceElevation) / viewHeight) * 100;
             }
             
@@ -202,37 +192,28 @@
                 return `hsl(${hue}, 70%, 50%)`;
             }
 
-            // 6. Draw Blocks
-            // We iterate through points. A point defines the BOTTOM of a layer.
-            // The layer extends up to the NEXT point's altitude.
-            
+            // 5. Draw
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
-                
-                // If this point is way above our chart top, stop.
-                // (But we allow one block to go "off the top" to fill the gap)
                 if (p.alt > chartTop + 2000) continue;
 
                 const nextP = points[i+1];
                 
-                // Calculate Start and End of this block
                 const bottomPct = getPct(p.alt);
                 
                 let topPct;
                 if (nextP) {
                     topPct = getPct(nextP.alt);
                 } else {
-                    // If no next point, extend upwards indefinitely (or just past chart top)
                     topPct = 200; 
                 }
 
-                // Optimization: If the entire block is below ground or above top, skip DOM creation
                 if (topPct < 0) continue; 
                 if (bottomPct > 100) continue;
 
                 const heightPct = topPct - bottomPct;
 
-                // -- DRAW THE COLORED BLOCK --
+                // -- 1. DRAW BLOCK (Inside Mask) --
                 const block = document.createElement('div');
                 block.className = 'wind-block';
                 block.style.bottom = `${bottomPct}%`;
@@ -241,12 +222,11 @@
                 block.innerHTML = `<span class="block-value">${p.speed}</span>`;
                 block.title = `${p.level} hPa @ ${Math.round(p.alt)} ft`;
                 
-                container.appendChild(block);
+                mask.appendChild(block);
                 
-                // -- DRAW THE AXIS LABEL -- 
-                // We only draw labels for points that are visibly inside the chart area
-                // (0% to 100%).
-                if (bottomPct >= 0 && bottomPct <= 98) {
+                // -- 2. DRAW LABEL (Inside Frame, Outside Mask) -- 
+                // We only label layers that start within the visible chart area
+                if (bottomPct >= -2 && bottomPct <= 98) {
                     const tick = document.createElement('div');
                     tick.className = 'alt-tick';
                     tick.style.bottom = `${bottomPct}%`;
@@ -261,22 +241,22 @@
                 }
             }
 
-            // 7. Ground UI
+            // Ground UI (Inside Frame)
             const badge = document.createElement('div');
             badge.className = 'ground-badge';
             badge.innerText = `Ground: ${Math.round(surfaceElevation)} ft`;
             container.appendChild(badge);
 
-            // 8. Top Label
+            // Top Label (Inside Frame)
             const topLabel = document.createElement('div');
             topLabel.className = 'alt-tick';
-            topLabel.style.top = '-8px'; // Just slightly off the top border
+            topLabel.style.top = '-8px';
             topLabel.innerText = '18.0k';
             container.appendChild(topLabel);
 
         } catch (err) {
             console.error(err);
-            container.innerHTML = "Error loading data.";
+            mask.innerHTML = "Error loading data.";
         }
     }
 
