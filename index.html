@@ -66,10 +66,7 @@
                 // Get values at the current time index
                 const speed = data.hourly[speedKey][timeIndex];
                 const direction = data.hourly[dirKey][timeIndex];
-                const heightMeters = data.hourly[heightKey][timeIndex];
-                
-                // Convert meters to feet
-                const heightFeet = Math.round(heightMeters * 3.28084);
+                const heightFeet = data.hourly[heightKey][timeIndex];
 
                 return {
                     x: speed,        // X-Axis: Speed
