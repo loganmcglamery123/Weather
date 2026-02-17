@@ -19,7 +19,7 @@
             padding: 30px;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 300px; /* Fixed width for the "Tower" look */
+            width: 300px;
             text-align: center;
         }
 
@@ -29,10 +29,10 @@
         /* The Chart Container */
         .profile-container {
             position: relative;
-            height: 600px; /* The height of our chart */
+            height: 600px; 
             width: 100%;
-            border-left: 2px solid #333; /* Y-Axis Line */
-            border-bottom: 2px solid #333; /* X-Axis Line */
+            border-left: 2px solid #333;
+            border-bottom: 2px solid #333;
             margin: 20px 0;
             background: #fafafa;
         }
@@ -70,25 +70,25 @@
             font-size: 0.9rem;
             transition: all 0.3s ease;
             box-sizing: border-box;
-            border-bottom: 1px solid rgba(255,255,255,0.1); /* Subtle separator */
+            border-bottom: 1px solid rgba(255,255,255,0.1); 
         }
         
         .wind-block:hover {
-            width: 110%; /* Pop out effect */
+            width: 110%;
             z-index: 10;
             box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
             cursor: pointer;
         }
 
-        /* Altitude Tick Labels on the left */
+        /* Altitude Tick Labels */
         .alt-label {
             position: absolute;
-            left: -45px; /* Push to left of axis */
+            left: -45px; 
             font-size: 0.75rem;
             color: #777;
             width: 40px;
             text-align: right;
-            transform: translateY(50%); /* Center vertically on the line */
+            transform: translateY(50%); 
         }
 
         .loading { color: #888; font-style: italic; }
@@ -128,70 +128,60 @@
             const levels = [1000, 975, 950, 925, 900, 850, 800, 700, 600, 500];
             
             let points = levels.map(level => {
+                const altValue = data.hourly[`geopotential_height_${level}hPa`][tIndex];
                 return {
                     speed: data.hourly[`wind_speed_${level}hPa`][tIndex],
-                    alt: data.hourly[`geopotential_height_${level}hPa`][tIndex] // already in feet? No, API sends Meters usually, but let's check unit
+                    alt: altValue // USED DIRECTLY AS REQUESTED (NO CONVERSION)
                 };
             });
-            
-            // Check API units. Usually geopotential_height is meters.
-            // Let's assume meters and convert to Feet for display.
-            points.forEach(p => p.alt = Math.round(p.alt * 3.28084));
 
             // Sort by Altitude (Low to High)
             points.sort((a, b) => a.alt - b.alt);
 
             // 3. Render
-            container.innerHTML = '<span class="y-axis-label">Altitude (ft)</span>'; // Clear loading
+            container.innerHTML = '<span class="y-axis-label">Altitude (ft)</span>'; 
             
-            const maxAlt = 20000; // Cap the chart at 20,000ft for scaling
-            const chartHeight = container.clientHeight;
-
+            const maxAlt = 20000; // Cap at 20,000ft for scaling
+            
             // Helper to get color
             function getColor(s) {
-                // Hue: 120 (Green) -> 0 (Red) based on speed 0 -> 40mph
                 let hue = 140 - (s * 4); 
-                if (hue < 0) hue = 0; // Cap at Red
-                if (hue > 260) hue = 260; // Cap at purple if we went other way
-                // Using HSL for smooth gradient
+                if (hue < 0) hue = 0; 
+                if (hue > 260) hue = 260; 
                 return `hsl(${hue}, 70%, 50%)`;
             }
 
-            // We need to fill the gaps between points to make a solid bar.
-            // Loop through points and draw a block from this point halfway to the next.
-            
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
                 const nextP = points[i+1];
                 
                 // Calculate Scale Position (Bottom %)
-                // 0ft = 0%, 20000ft = 100%
                 const bottomPct = (p.alt / maxAlt) * 100;
                 
-                // Calculate Height of this block
-                // It should reach up to the next point (or top of chart)
+                // Calculate Top Position
                 let topPct;
                 if (nextP) {
                     topPct = (nextP.alt / maxAlt) * 100;
                 } else {
-                    topPct = bottomPct + 10; // Give the top block some height
+                    topPct = bottomPct + 8; // Default height for top block
                 }
                 
                 const heightPct = topPct - bottomPct;
 
-                // Create Element
+                // Create Block
                 const block = document.createElement('div');
                 block.className = 'wind-block';
                 block.style.bottom = `${bottomPct}%`;
-                block.style.height = `${heightPct + 0.5}%`; // +0.5 to overlap seams
+                block.style.height = `${heightPct + 0.5}%`; // Slight overlap to prevent gaps
                 block.style.backgroundColor = getColor(p.speed);
-                block.innerHTML = `${p.speed}`; // Number on top
+                block.innerHTML = `${p.speed}`; 
                 
-                // Create Axis Label (Only for specific points to avoid clutter)
+                // Create Axis Label
                 const label = document.createElement('div');
                 label.className = 'alt-label';
                 label.style.bottom = `${bottomPct}%`;
-                label.innerText = (p.alt / 1000).toFixed(1) + 'k';
+                // Just rounding the raw value for cleaner display on the axis
+                label.innerText = Math.round(p.alt / 1000) + 'k'; 
 
                 container.appendChild(block);
                 container.appendChild(label);
