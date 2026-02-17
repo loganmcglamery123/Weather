@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HD Vertical Wind Profile</title>
+    <title>Advanced Vertical Profile</title>
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
@@ -19,8 +19,9 @@
             padding: 30px;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 380px; 
+            width: 400px; 
             text-align: center;
+            position: relative;
         }
 
         h2 { margin: 0 0 5px 0; color: #333; font-size: 1.4rem; }
@@ -30,14 +31,15 @@
             position: relative;
             height: 600px; 
             width: 70%;
-            margin-left: 30%; 
-            border-left: 2px solid #333;
-            border-bottom: 2px solid #333;
+            margin-left: 15%; /* Adjusted for dual axes */
+            margin-right: 15%;
+            border: 2px solid #333;
             background: #fafafa;
             margin-bottom: 20px;
+            margin-top: 20px;
         }
 
-        /* Inner Mask (Only for colors, not text) */
+        /* Inner Mask (Only for colored blocks) */
         .clipping-mask {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -45,10 +47,20 @@
             z-index: 1;
         }
 
+        /* SVG Layer for Temp Line (Sits on top of blocks) */
+        .svg-layer {
+            position: absolute;
+            top: 0; left: 0; 
+            width: 100%; height: 100%;
+            z-index: 10;
+            pointer-events: none; /* Click through to wind blocks */
+        }
+
+        /* Y-Axis Label (Altitude) */
         .y-axis-label {
             position: absolute;
             transform: rotate(-90deg);
-            left: -120px;
+            left: -80px;
             top: 50%;
             color: #555;
             font-weight: bold;
@@ -56,40 +68,46 @@
             white-space: nowrap;
         }
 
-        .x-axis-label {
+        /* X-Axis Labels */
+        .x-axis-wind {
             margin-top: 5px;
             font-weight: bold;
             color: #555;
             font-size: 0.9rem;
         }
+        .x-axis-temp {
+            position: absolute;
+            top: -25px;
+            width: 100%;
+            text-align: center;
+            font-weight: bold;
+            color: #d32f2f; /* Red for Temp */
+            font-size: 0.9rem;
+        }
 
-        /* The Colored Blocks (No text inside anymore) */
+        /* The Colored Blocks */
         .wind-block {
             position: absolute;
             left: 0;
             width: 100%;
-            background-color: #ccc; /* fallback */
+            background-color: #ccc; 
             border-top: 1px dotted rgba(255,255,255,0.3); 
             transition: opacity 0.2s;
         }
-        
-        .wind-block:hover {
-            opacity: 0.9;
-        }
+        .wind-block:hover { opacity: 0.9; }
 
-        /* The Floating Data Labels (New Layer) */
+        /* Floating Data Labels (Wind) */
         .data-label {
             position: absolute;
-            left: 0; 
-            width: 100%;
+            left: 0; width: 100%;
             text-align: center;
             color: white;
             font-weight: bold;
             text-shadow: 0 1px 2px rgba(0,0,0,0.5);
             font-size: 0.9rem;
-            z-index: 2; /* Sits on top of mask */
-            pointer-events: none; /* Let clicks pass through to the bar */
-            transform: translateY(50%); /* Center vert on the point */
+            z-index: 2; 
+            pointer-events: none; 
+            transform: translateY(50%); 
         }
 
         .wind-arrow {
@@ -102,8 +120,8 @@
         /* Axis Ticks */
         .alt-tick {
             position: absolute;
-            left: -90px; 
-            width: 80px;
+            left: -55px; 
+            width: 50px;
             text-align: right;
             font-size: 0.75rem;
             color: #666;
@@ -114,41 +132,62 @@
         
         .grid-line {
             position: absolute;
-            left: 0;
-            width: 100%;
-            height: 1px;
+            left: 0; width: 100%; height: 1px;
             border-top: 1px dashed #ccc;
-            z-index: 0;
-            pointer-events: none;
+            z-index: 0; pointer-events: none;
         }
 
-        .ground-tick {
-            font-weight: bold;
-            color: #333;
+        .ground-tick { font-weight: bold; color: #333; }
+        .ground-grid { border-top: 2px dashed #333; }
+
+        /* Temp & Freezing Level Styles */
+        .freezing-line {
+            stroke: #0066ff;
+            stroke-width: 2;
+            stroke-dasharray: 5,5;
         }
-        .ground-grid {
-            border-top: 2px dashed #333;
+        .freezing-label {
+            fill: #0066ff;
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-anchor: end; /* Align right */
+        }
+        .temp-line {
+            fill: none;
+            stroke: #d32f2f;
+            stroke-width: 3;
+            filter: drop-shadow(0px 1px 2px rgba(0,0,0,0.3));
+        }
+        .temp-dot {
+            fill: white;
+            stroke: #d32f2f;
+            stroke-width: 2;
         }
     </style>
 </head>
 <body>
 
     <div class="card">
-        <h2>Vertical Wind Profile</h2>
-        <p>Speed & Direction (Fixed Clipping)</p>
+        <h2>Vertical Profile</h2>
+        <p>Wind (Blocks) & Temp (Line)</p>
 
         <div class="chart-frame" id="chartArea">
             <span class="y-axis-label">Altitude (ft)</span>
+            <div class="x-axis-temp">Temperature (°F)</div>
+            
             <div class="clipping-mask" id="chartMask"></div>
-            </div>
+            
+            <svg class="svg-layer" id="svgLayer"></svg>
+        </div>
 
-        <div class="x-axis-label">Wind Speed (mph)</div>
+        <div class="x-axis-wind">Wind Speed (mph)</div>
     </div>
 
 <script>
     async function initChart() {
         const container = document.getElementById('chartArea');
         const mask = document.getElementById('chartMask');
+        const svg = document.getElementById('svgLayer');
         
         const levels = [
             1000, 975, 950, 925, 900, 875, 850, 825, 800, 
@@ -156,11 +195,13 @@
             575, 550, 525, 500
         ];
 
-        let hourlyParams = [];
+        // Build URL: Wind, Direction, Height, AND Temperature
+        let hourlyParams = ["freezing_level_height"]; // Add freezing level
         levels.forEach(l => {
             hourlyParams.push(`wind_speed_${l}hPa`);
             hourlyParams.push(`wind_direction_${l}hPa`);
             hourlyParams.push(`geopotential_height_${l}hPa`);
+            hourlyParams.push(`temperature_${l}hPa`); // NEW
         });
         
         const baseUrl = "https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651";
@@ -181,18 +222,23 @@
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
             if (tIndex === -1) tIndex = 0;
 
+            // Get Freezing Level (Meters -> Feet)
+            const freezingLevelFt = data.hourly.freezing_level_height[tIndex] * 3.28084;
+
             let points = levels.map(level => {
                 const s = data.hourly[`wind_speed_${level}hPa`];
                 const d = data.hourly[`wind_direction_${level}hPa`];
                 const a = data.hourly[`geopotential_height_${level}hPa`];
+                const t = data.hourly[`temperature_${level}hPa`]; // NEW
 
-                if (!s || !a || !d) return null;
+                if (!s || !a || !d || !t) return null;
 
                 return {
                     level: level,
                     speed: s[tIndex],
                     dir: d[tIndex],
-                    alt: a[tIndex] 
+                    alt: a[tIndex],
+                    temp: t[tIndex] // NEW
                 };
             }).filter(p => p !== null); 
 
@@ -203,16 +249,29 @@
             }
             points.sort((a, b) => a.alt - b.alt);
 
-            // Clear previous render
+            // Cleanup
             mask.innerHTML = ''; 
+            svg.innerHTML = ''; // Clear SVG
             container.querySelectorAll('.alt-tick, .grid-line, .data-label').forEach(el => el.remove());
 
             const viewHeight = chartTop - surfaceElevation;
 
-            function getPct(altitude) {
+            // --- SCALING FUNCTIONS ---
+            function getAltPct(altitude) {
                 return ((altitude - surfaceElevation) / viewHeight) * 100;
             }
             
+            // Map Temperature to X-Axis (0 to 100%)
+            // We need a min/max range. Let's find min/max from data and add padding.
+            const allTemps = points.map(p => p.temp);
+            const minTemp = Math.min(...allTemps) - 10;
+            const maxTemp = Math.max(...allTemps) + 10;
+            const tempRange = maxTemp - minTemp;
+
+            function getTempX(temp) {
+                return ((temp - minTemp) / tempRange) * 100;
+            }
+
             function getColor(s) {
                 let hue = 140 - (s * 4); 
                 if (hue < 0) hue = 0; 
@@ -220,44 +279,37 @@
                 return `hsl(${hue}, 70%, 50%)`;
             }
 
-            // --- MAIN RENDER LOOP ---
+            // --- 1. DRAW WIND BLOCKS ---
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
                 if (p.alt > chartTop + 1000) continue;
 
                 const nextP = points[i+1];
-                
-                // 1. Calculate REAL math positions (for the bar)
-                const realBottomPct = getPct(p.alt);
-                const realTopPct = nextP ? getPct(nextP.alt) : 200; // 200 extends way up
+                const realBottomPct = getAltPct(p.alt);
+                const realTopPct = nextP ? getAltPct(nextP.alt) : 200;
 
-                // Skip if completely off screen
                 if (realTopPct < 0 || realBottomPct > 100) continue;
 
                 const heightPct = realTopPct - realBottomPct;
 
-                // 2. Draw Color Block (Inside Mask)
+                // Block
                 const block = document.createElement('div');
                 block.className = 'wind-block';
                 block.style.bottom = `${realBottomPct}%`;
                 block.style.height = `${heightPct}%`; 
                 block.style.backgroundColor = getColor(p.speed);
-                block.title = `Alt: ${Math.round(p.alt)}ft | Speed: ${p.speed}mph | Dir: ${p.dir}°`;
                 mask.appendChild(block);
 
-                // 3. Draw Text Label (Outside Mask - VISIBLE CENTER)
-                // We calculate the center of the "Visible" part of the bar
+                // Label (Visible Center Logic)
                 const visualBottom = Math.max(realBottomPct, 0);
                 const visualTop = Math.min(realTopPct, 100);
                 const visualHeight = visualTop - visualBottom;
 
-                // Only show text if we have enough visible space (e.g. > 3%)
                 if (visualHeight > 3) {
                     const labelCenter = visualBottom + (visualHeight / 2);
-                    
                     const label = document.createElement('div');
                     label.className = 'data-label';
-                    label.style.bottom = `${labelCenter}%`; // Centered on visible portion
+                    label.style.bottom = `${labelCenter}%`; 
                     label.innerHTML = `
                         <span>${Math.round(p.speed)}</span>
                         <span class="wind-arrow" style="transform: rotate(${p.dir}deg)">↓</span>
@@ -266,7 +318,67 @@
                 }
             }
 
-            // --- AXIS LABELS ---
+            // --- 2. DRAW TEMPERATURE LINE (SVG) ---
+            // Build points string "x,y x,y x,y"
+            // SVG Y is 0 at top, so Y = 100 - pct
+            let polylinePoints = "";
+            
+            points.forEach(p => {
+                const x = getTempX(p.temp); 
+                const y = 100 - getAltPct(p.alt); 
+                
+                // Only draw if roughly in bounds
+                if (y > -10 && y < 110) {
+                    polylinePoints += `${x}%,${y}% `;
+                    
+                    // Add dots
+                    if (y >= 0 && y <= 100) {
+                        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                        circle.setAttribute("cx", `${x}%`);
+                        circle.setAttribute("cy", `${y}%`);
+                        circle.setAttribute("r", "3");
+                        circle.setAttribute("class", "temp-dot");
+                        circle.innerHTML = `<title>${p.temp}°F</title>`; // Tooltip
+                        svg.appendChild(circle);
+                    }
+                }
+            });
+
+            // Draw the line
+            const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+            polyline.setAttribute("points", polylinePoints);
+            polyline.setAttribute("class", "temp-line");
+            svg.prepend(polyline); // Put behind dots
+
+            // --- 3. DRAW FREEZING LEVEL ---
+            const freezingPct = getAltPct(freezingLevelFt);
+            if (freezingPct >= 0 && freezingPct <= 100) {
+                const lineY = 100 - freezingPct;
+                
+                // SVG Line
+                const flLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                flLine.setAttribute("x1", "0%");
+                flLine.setAttribute("x2", "100%");
+                flLine.setAttribute("y1", `${lineY}%`);
+                flLine.setAttribute("y2", `${lineY}%`);
+                flLine.setAttribute("class", "freezing-line");
+                svg.appendChild(flLine);
+
+                // SVG Text Label
+                const flText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                flText.setAttribute("x", "98%"); // Right align
+                flText.setAttribute("y", `${lineY - 2}%`); // Slightly above line
+                flText.setAttribute("class", "freezing-label");
+                flText.textContent = `Freezing: ${Math.round(freezingLevelFt)}ft`;
+                svg.appendChild(flText);
+            }
+
+            // --- 4. AXIS LABELS ---
+            // Add Temp Axis Labels (Min / Max)
+            const xLabel = document.querySelector('.x-axis-temp');
+            xLabel.innerHTML = `<span style="float:left">${Math.round(minTemp)}°F</span> Temperature (°F) <span style="float:right">${Math.round(maxTemp)}°F</span>`;
+
+            // Altitude Ticks
             const groundTick = document.createElement('div');
             groundTick.className = 'alt-tick ground-tick';
             groundTick.style.bottom = `0%`;
@@ -280,7 +392,7 @@
 
             const start1k = Math.ceil(surfaceElevation / 1000) * 1000;
             for (let alt = start1k; alt <= chartTop; alt += 1000) {
-                const pct = getPct(alt);
+                const pct = getAltPct(alt);
                 if (pct < 4) continue; 
 
                 const tick = document.createElement('div');
