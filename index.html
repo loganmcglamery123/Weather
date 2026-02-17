@@ -3,145 +3,207 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vertical Wind Profile</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
-    
+    <title>Wind Profile Heatmap</title>
     <style>
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: #f4f4f9; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #f0f2f5; 
             display: flex; 
             flex-direction: column; 
             align-items: center; 
             padding: 20px;
         }
-        .container {
-            width: 95%;
-            max-width: 900px;
+
+        .card {
             background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 300px; /* Fixed width for the "Tower" look */
+            text-align: center;
         }
-        h2 { margin-top: 0; color: #333; text-align: center;}
-        p { color: #666; font-size: 0.9em; text-align: center;}
+
+        h2 { margin: 0 0 10px 0; color: #333; font-size: 1.2rem; }
+        p { color: #666; margin: 0 0 20px 0; font-size: 0.9rem; }
+
+        /* The Chart Container */
+        .profile-container {
+            position: relative;
+            height: 600px; /* The height of our chart */
+            width: 100%;
+            border-left: 2px solid #333; /* Y-Axis Line */
+            border-bottom: 2px solid #333; /* X-Axis Line */
+            margin: 20px 0;
+            background: #fafafa;
+        }
+
+        /* Y-Axis Label */
+        .y-axis-label {
+            position: absolute;
+            transform: rotate(-90deg);
+            left: -50px;
+            top: 50%;
+            color: #555;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        /* X-Axis Label */
+        .x-axis-label {
+            margin-top: 5px;
+            font-weight: bold;
+            color: #555;
+            font-size: 0.9rem;
+        }
+
+        /* Individual Data Blocks */
+        .wind-block {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+            border-bottom: 1px solid rgba(255,255,255,0.1); /* Subtle separator */
+        }
+        
+        .wind-block:hover {
+            width: 110%; /* Pop out effect */
+            z-index: 10;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
+            cursor: pointer;
+        }
+
+        /* Altitude Tick Labels on the left */
+        .alt-label {
+            position: absolute;
+            left: -45px; /* Push to left of axis */
+            font-size: 0.75rem;
+            color: #777;
+            width: 40px;
+            text-align: right;
+            transform: translateY(50%); /* Center vertically on the line */
+        }
+
+        .loading { color: #888; font-style: italic; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Current Wind Profile</h2>
-    <p>Speed (mph) vs Altitude (ft)</p>
-    <div style="height: 600px; width: 100%;">
-        <canvas id="windProfileChart"></canvas>
+    <div class="card">
+        <h2>Vertical Wind Profile</h2>
+        <p>Current Conditions</p>
+
+        <div class="profile-container" id="chartArea">
+            <span class="y-axis-label">Altitude (ft)</span>
+            <div class="loading">Loading Data...</div>
+        </div>
+
+        <div class="x-axis-label">Wind Speed (mph)</div>
     </div>
-</div>
 
 <script>
-    // Register the datalabels plugin
-    Chart.register(ChartDataLabels);
-
-    async function fetchAndChart() {
+    async function initChart() {
+        const container = document.getElementById('chartArea');
         const url = "https://api.open-meteo.com/v1/forecast?latitude=44.5101&longitude=-122.969&daily=sunrise,sunset&hourly=wind_speed_1000hPa,wind_speed_975hPa,wind_speed_950hPa,wind_speed_925hPa,wind_speed_900hPa,wind_speed_850hPa,wind_speed_800hPa,wind_speed_700hPa,wind_speed_600hPa,wind_speed_500hPa,geopotential_height_1000hPa,geopotential_height_500hPa,geopotential_height_975hPa,geopotential_height_600hPa,geopotential_height_950hPa,geopotential_height_925hPa,geopotential_height_850hPa,geopotential_height_900hPa,geopotential_height_800hPa,geopotential_height_700hPa&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
 
         try {
             const response = await fetch(url);
             const data = await response.json();
 
-            // 1. Find Current Hour
+            // 1. Get Current Hour Index
             const now = new Date();
-            const currentHourISO = now.toISOString().slice(0, 13); 
-            let timeIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
-            if (timeIndex === -1) timeIndex = 0; 
+            const currentHourISO = now.toISOString().slice(0, 13);
+            let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
+            if (tIndex === -1) tIndex = 0;
 
-            // 2. Define Levels (Ordered from Ground -> Up)
-            // Note: We reverse the array order here because in a Bar Chart, 
-            // the first item appears at the TOP. We want Ground (1000hPa) at the BOTTOM.
-            // So we list 500hPa (highest altitude) first.
-            const levels = [500, 600, 700, 800, 850, 900, 925, 950, 975, 1000];
-
-            // 3. Extract Data
-            const labels = [];
-            const speeds = [];
-
-            levels.forEach(level => {
-                const speedKey = `wind_speed_${level}hPa`;
-                const heightKey = `geopotential_height_${level}hPa`;
-
-                const speed = data.hourly[speedKey][timeIndex];
-                const heightVal = data.hourly[heightKey][timeIndex]; // No conversion as requested
-
-                // Create the label for the Y-Axis (e.g. "18000 ft")
-                labels.push(`${Math.round(heightVal)} ft`);
-                speeds.push(speed);
+            // 2. Prepare Data Array
+            // Note: 1000hPa = Ground, 500hPa = ~18k ft
+            const levels = [1000, 975, 950, 925, 900, 850, 800, 700, 600, 500];
+            
+            let points = levels.map(level => {
+                return {
+                    speed: data.hourly[`wind_speed_${level}hPa`][tIndex],
+                    alt: data.hourly[`geopotential_height_${level}hPa`][tIndex] // already in feet? No, API sends Meters usually, but let's check unit
+                };
             });
+            
+            // Check API units. Usually geopotential_height is meters.
+            // Let's assume meters and convert to Feet for display.
+            points.forEach(p => p.alt = Math.round(p.alt * 3.28084));
 
-            // 4. Color Helper Function
-            function getColor(value) {
-                if (value < 5) return 'rgba(75, 192, 192, 0.7)';   // Green/Teal (Calm)
-                if (value < 15) return 'rgba(54, 162, 235, 0.7)';  // Blue (Breezy)
-                if (value < 25) return 'rgba(255, 206, 86, 0.7)';  // Yellow (Windy)
-                if (value < 40) return 'rgba(255, 159, 64, 0.7)';  // Orange (Strong)
-                return 'rgba(255, 99, 132, 0.7)';                  // Red (Storm)
+            // Sort by Altitude (Low to High)
+            points.sort((a, b) => a.alt - b.alt);
+
+            // 3. Render
+            container.innerHTML = '<span class="y-axis-label">Altitude (ft)</span>'; // Clear loading
+            
+            const maxAlt = 20000; // Cap the chart at 20,000ft for scaling
+            const chartHeight = container.clientHeight;
+
+            // Helper to get color
+            function getColor(s) {
+                // Hue: 120 (Green) -> 0 (Red) based on speed 0 -> 40mph
+                let hue = 140 - (s * 4); 
+                if (hue < 0) hue = 0; // Cap at Red
+                if (hue > 260) hue = 260; // Cap at purple if we went other way
+                // Using HSL for smooth gradient
+                return `hsl(${hue}, 70%, 50%)`;
             }
 
-            const bgColors = speeds.map(s => getColor(s));
-            const borderColors = speeds.map(s => getColor(s).replace('0.7', '1'));
-
-            // 5. Create Chart
-            const ctx = document.getElementById('windProfileChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels, // The Altitudes
-                    datasets: [{
-                        label: 'Wind Speed',
-                        data: speeds,
-                        backgroundColor: bgColors,
-                        borderColor: borderColors,
-                        borderWidth: 1,
-                        barPercentage: 0.6, // Makes bars thinner/thicker
-                    }]
-                },
-                options: {
-                    indexAxis: 'y', // This makes the bars horizontal (Y-axis is categories)
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            title: { display: true, text: 'Wind Speed (mph)' },
-                            beginAtZero: true,
-                            grid: { color: '#eee' }
-                        },
-                        y: {
-                            title: { display: true, text: 'Altitude' },
-                            grid: { display: false }
-                        }
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        datalabels: {
-                            color: 'black',
-                            anchor: 'end',
-                            align: 'start', // Puts the number inside the end of the bar
-                            offset: -4,
-                            font: { weight: 'bold' },
-                            formatter: function(value) {
-                                return value + ' mph';
-                            }
-                        }
-                    }
+            // We need to fill the gaps between points to make a solid bar.
+            // Loop through points and draw a block from this point halfway to the next.
+            
+            for (let i = 0; i < points.length; i++) {
+                const p = points[i];
+                const nextP = points[i+1];
+                
+                // Calculate Scale Position (Bottom %)
+                // 0ft = 0%, 20000ft = 100%
+                const bottomPct = (p.alt / maxAlt) * 100;
+                
+                // Calculate Height of this block
+                // It should reach up to the next point (or top of chart)
+                let topPct;
+                if (nextP) {
+                    topPct = (nextP.alt / maxAlt) * 100;
+                } else {
+                    topPct = bottomPct + 10; // Give the top block some height
                 }
-            });
+                
+                const heightPct = topPct - bottomPct;
+
+                // Create Element
+                const block = document.createElement('div');
+                block.className = 'wind-block';
+                block.style.bottom = `${bottomPct}%`;
+                block.style.height = `${heightPct + 0.5}%`; // +0.5 to overlap seams
+                block.style.backgroundColor = getColor(p.speed);
+                block.innerHTML = `${p.speed}`; // Number on top
+                
+                // Create Axis Label (Only for specific points to avoid clutter)
+                const label = document.createElement('div');
+                label.className = 'alt-label';
+                label.style.bottom = `${bottomPct}%`;
+                label.innerText = (p.alt / 1000).toFixed(1) + 'k';
+
+                container.appendChild(block);
+                container.appendChild(label);
+            }
 
         } catch (err) {
-            console.error("Error fetching weather data:", err);
-            document.querySelector('.container').innerHTML += `<p style="color:red">Error loading data. Check console.</p>`;
+            console.error(err);
+            container.innerHTML = "Error loading data.";
         }
     }
 
-    fetchAndChart();
+    initChart();
 </script>
 
 </body>
