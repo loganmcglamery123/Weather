@@ -19,7 +19,7 @@
             padding: 30px;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 500px; /* Wider to fit side columns */
+            width: 500px; 
             text-align: center;
             position: relative;
         }
@@ -30,14 +30,13 @@
         .chart-frame {
             position: relative;
             height: 600px; 
-            width: 60%; /* Chart takes up center 60% */
-            margin: 0 auto; /* Center it */
+            width: 60%; 
+            margin: 0 auto; 
             border: 2px solid #333;
             background: #fafafa;
             margin-bottom: 20px;
         }
 
-        /* Inner Mask */
         .clipping-mask {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -45,7 +44,6 @@
             z-index: 1;
         }
 
-        /* SVG Layer (For freezing line only) */
         .svg-layer {
             position: absolute;
             top: 0; left: 0; 
@@ -54,7 +52,6 @@
             pointer-events: none; 
         }
 
-        /* Y-Axis Label (Altitude) */
         .y-axis-label {
             position: absolute;
             transform: rotate(-90deg);
@@ -73,7 +70,6 @@
             font-size: 0.9rem;
         }
 
-        /* Wind Blocks */
         .wind-block {
             position: absolute;
             left: 0; width: 100%;
@@ -82,7 +78,6 @@
         }
         .wind-block:hover { opacity: 0.95; }
 
-        /* Data Labels (Speed + Arrow) */
         .data-label {
             position: absolute;
             left: 0; width: 100%;
@@ -102,7 +97,6 @@
             font-size: 1.2em;
         }
 
-        /* LEFT AXIS: Altitude Ticks */
         .alt-tick {
             position: absolute;
             left: -65px; 
@@ -114,10 +108,9 @@
             font-variant-numeric: tabular-nums;
         }
         
-        /* RIGHT AXIS: Temp Values */
         .temp-tick {
             position: absolute;
-            right: -60px; /* Push to right side */
+            right: -60px; 
             width: 50px;
             text-align: left;
             font-size: 0.8rem;
@@ -137,7 +130,6 @@
         .ground-tick { font-weight: bold; color: #222; }
         .ground-grid { border-top: 2px dashed #333; }
 
-        /* Freezing Level Line */
         .freezing-line {
             stroke: #0066ff;
             stroke-width: 2;
@@ -150,7 +142,6 @@
             text-anchor: end; 
         }
         
-        /* Header for Temp Column */
         .temp-header {
             position: absolute;
             right: -70px;
@@ -243,7 +234,6 @@
                 };
             }).filter(p => p !== null); 
 
-            // Unit check
             const checkPoint = points.find(p => p.level === 500);
             if (checkPoint && checkPoint.alt < 10000) {
                  points.forEach(p => p.alt = p.alt * 3.28084);
@@ -259,7 +249,7 @@
                 return ((altitude - surfaceElevation) / viewHeight) * 100;
             }
 
-            // --- IMPROVED COLOR GRADIENT (Standard Met Scale) ---
+            // --- FIXED COLOR GRADIENT ---
             function interpolateHsl(val, minVal, maxVal, colorStart, colorEnd) {
                 let t = (val - minVal) / (maxVal - minVal);
                 t = Math.max(0, Math.min(1, t)); 
@@ -276,11 +266,17 @@
                 if (speed <= 25) return interpolateHsl(speed, 10, 25, [150, 80, 45], [100, 80, 45]);
                 // 25-40: Yellow/Orange (Breezy)
                 if (speed <= 40) return interpolateHsl(speed, 25, 40, [60, 90, 50], [30, 95, 50]);
-                // 40+: Red/Purple (Strong)
-                return interpolateHsl(Math.min(speed, 70), 40, 70, [10, 90, 50], [280, 90, 40]);
+                
+                // --- FIXED HIGH SPEED ---
+                // 40-60: Orange -> Red (Hue 30 down to 0)
+                if (speed <= 60) return interpolateHsl(speed, 40, 60, [30, 95, 50], [0, 100, 50]);
+                
+                // 60+: Red -> Purple (Hue 360 down to 270)
+                // We use 360 as start so we don't cross green
+                return interpolateHsl(Math.min(speed, 90), 60, 90, [360, 100, 50], [270, 100, 40]);
             }
 
-            // --- RENDER LOOP ---
+            // --- RENDER ---
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
                 if (p.alt > chartTop + 1000) continue;
@@ -300,16 +296,14 @@
                 block.style.backgroundColor = getColor(p.speed);
                 mask.appendChild(block);
 
-                // Calculate Visual Center
                 const visualBottom = Math.max(realBottomPct, 0);
                 const visualTop = Math.min(realTopPct, 100);
                 const visualHeight = visualTop - visualBottom;
 
-                // 2. Labels (Only if space permits)
+                // 2. Labels
                 if (visualHeight > 3.0) { 
                     const labelCenter = visualBottom + (visualHeight / 2);
                     
-                    // Wind Speed Label (Center)
                     const label = document.createElement('div');
                     label.className = 'data-label';
                     label.style.bottom = `${labelCenter}%`; 
@@ -319,10 +313,9 @@
                     `;
                     container.appendChild(label);
 
-                    // Temperature Label (Right Side)
                     const tempTick = document.createElement('div');
                     tempTick.className = 'temp-tick';
-                    tempTick.style.bottom = `${labelCenter}%`; // Align with center of block
+                    tempTick.style.bottom = `${labelCenter}%`;
                     tempTick.innerText = Math.round(p.temp) + '°';
                     container.appendChild(tempTick);
                 }
@@ -340,18 +333,16 @@
                 flLine.setAttribute("class", "freezing-line");
                 svg.appendChild(flLine);
 
-                // Small Text Label for Freezing Level
                 const flText = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                flText.setAttribute("x", "2px"); // Left Align
+                flText.setAttribute("x", "2px"); 
                 flText.setAttribute("y", `${lineY - 2}%`); 
                 flText.setAttribute("class", "freezing-label");
-                flText.setAttribute("style", "text-anchor: start;"); // Left align
+                flText.setAttribute("style", "text-anchor: start;"); 
                 flText.textContent = `frz lvl`;
                 svg.appendChild(flText);
             }
 
             // --- AXIS ---
-            // Ground
             const groundTick = document.createElement('div');
             groundTick.className = 'alt-tick ground-tick';
             groundTick.style.bottom = `0%`;
@@ -362,7 +353,6 @@
             groundGrid.style.bottom = `0%`;
             container.appendChild(groundGrid);
 
-            // 1000ft Ticks
             const start1k = Math.ceil(surfaceElevation / 1000) * 1000;
             for (let alt = start1k; alt <= chartTop; alt += 1000) {
                 const pct = getAltPct(alt);
