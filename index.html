@@ -26,22 +26,24 @@
         h2 { margin: 0 0 5px 0; color: #333; font-size: 1.4rem; }
         p { color: #666; margin: 0 0 25px 0; font-size: 0.9rem; }
 
-        .profile-container {
+        /* Chart Frame */
+        .chart-frame {
             position: relative;
             height: 600px; 
-            width: 80%;
-            margin-left: 20%; /* Space for axis labels */
+            width: 75%;
+            margin-left: 25%; /* Room for Y-axis labels */
             border-left: 2px solid #333;
             border-bottom: 2px solid #333;
             background: #fafafa;
             margin-bottom: 20px;
-            overflow: hidden; /* Important: Crops the bars that go 'underground' */
+            /* This is the magic: it hides anything drawn below ground or above 18k */
+            overflow: hidden; 
         }
 
         .y-axis-label {
             position: absolute;
             transform: rotate(-90deg);
-            left: -90px;
+            left: -100px;
             top: 50%;
             color: #555;
             font-weight: bold;
@@ -56,6 +58,7 @@
             font-size: 0.9rem;
         }
 
+        /* The Colored Blocks */
         .wind-block {
             position: absolute;
             left: 0;
@@ -65,51 +68,67 @@
             justify-content: center;
             color: white;
             font-weight: bold;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.4);
             font-size: 1rem;
             box-sizing: border-box;
-            border-bottom: 1px solid rgba(255,255,255,0.2); 
-            transition: transform 0.2s;
+            /* Thin line to show where the data point actually changes */
+            border-top: 1px dotted rgba(255,255,255,0.4); 
+            transition: opacity 0.2s;
         }
         
         .wind-block:hover {
-            transform: scaleX(1.05);
-            z-index: 10;
-            box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
-            cursor: pointer;
+            opacity: 0.9;
+            cursor: crosshair;
+        }
+        
+        /* The number inside the block */
+        .block-value {
+            z-index: 2;
         }
 
-        .alt-label {
+        /* Altitude Ticks (Y-Axis) */
+        .alt-tick {
             position: absolute;
-            left: -55px;
-            font-size: 0.8rem;
-            color: #666;
-            width: 50px;
+            left: -65px; /* Outside the chart */
+            width: 60px;
             text-align: right;
-            transform: translateY(50%); /* Center vertically on the tick */
-            font-feature-settings: "tnum";
-            font-variant-numeric: tabular-nums;
+            font-size: 0.75rem;
+            color: #666;
+            transform: translateY(50%); /* Center on the line */
         }
-
-        .ground-line {
+        
+        /* Dashed line connecting tick to block boundary */
+        .grid-line {
             position: absolute;
+            left: 0;
             width: 100%;
-            border-bottom: 2px dashed #333;
-            z-index: 20;
-            bottom: 0; /* Pinned to bottom */
+            height: 1px;
+            border-top: 1px dashed #ddd;
+            z-index: 0;
+            pointer-events: none;
         }
 
+        /* Ground Overlay */
+        .ground-marker {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 0px; 
+            border-bottom: 2px dashed #333;
+            z-index: 10;
+        }
+        
         .ground-badge {
             position: absolute;
             right: 5px;
             bottom: 5px;
-            background: rgba(255, 255, 255, 0.9);
+            background: rgba(255, 255, 255, 0.95);
             padding: 4px 8px;
             border-radius: 4px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             color: #333;
             font-weight: bold;
-            z-index: 21;
+            z-index: 11;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             pointer-events: none;
         }
@@ -121,7 +140,7 @@
         <h2>Vertical Wind Profile</h2>
         <p>Current Conditions</p>
 
-        <div class="profile-container" id="chartArea">
+        <div class="chart-frame" id="chartArea">
             <span class="y-axis-label">Altitude (ft)</span>
             <div style="padding-top: 50%; color: #888;">Loading...</div>
         </div>
@@ -133,62 +152,47 @@
     async function initChart() {
         const container = document.getElementById('chartArea');
         
-        // Flagstaff, AZ
+        // Flagstaff, AZ coordinates for testing
         const url = "https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651&hourly=wind_speed_1000hPa,wind_speed_975hPa,wind_speed_950hPa,wind_speed_925hPa,wind_speed_900hPa,wind_speed_850hPa,wind_speed_800hPa,wind_speed_700hPa,wind_speed_600hPa,wind_speed_500hPa,geopotential_height_1000hPa,geopotential_height_500hPa,geopotential_height_975hPa,geopotential_height_600hPa,geopotential_height_950hPa,geopotential_height_925hPa,geopotential_height_850hPa,geopotential_height_900hPa,geopotential_height_800hPa,geopotential_height_700hPa&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
 
         try {
             const response = await fetch(url);
             const data = await response.json();
 
-            // 1. Config
-            const surfaceElevation = data.elevation * 3.28084; // Meters -> Feet
-            const maxChartAlt = 19000; // Increased to 19k so the 18k block fits comfortably
+            // 1. Setup Constants
+            const surfaceElevation = data.elevation * 3.28084; // Ground Level in Feet
+            const chartTop = 18000; // Top of chart in Feet
             
-            // 2. Get Time
+            // 2. Get Time Index
             const now = new Date();
             const currentHourISO = now.toISOString().slice(0, 13);
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
             if (tIndex === -1) tIndex = 0;
 
+            // 3. Define all possible levels we want to check
             const levels = [1000, 975, 950, 925, 900, 850, 800, 700, 600, 500];
             
+            // 4. Build Data Points
             let points = levels.map(level => {
                 return {
+                    level: level, // e.g. 850
                     speed: data.hourly[`wind_speed_${level}hPa`][tIndex],
-                    alt: data.hourly[`geopotential_height_${level}hPa`][tIndex]
+                    alt: data.hourly[`geopotential_height_${level}hPa`][tIndex] // Raw feet (or meters if API changes, but current setup assumes units)
                 };
             });
+            // Sort lowest altitude to highest
             points.sort((a, b) => a.alt - b.alt);
 
-            // 3. INTELLIGENT FILTERING
-            // We want to keep the first point that is BELOW ground (so we can fill the gap up to the first air layer)
-            // And we want to keep the first point ABOVE maxAlt (so we can fill the gap up to the top)
-            
-            let filteredPoints = [];
-            
-            // Find index of the first point above ground
-            const firstAboveGroundIndex = points.findIndex(p => p.alt > surfaceElevation);
-            
-            // If there is a point below ground (e.g., 800hPa at 6400ft), include it!
-            // It will be our "foundation" block.
-            let startIndex = (firstAboveGroundIndex > 0) ? firstAboveGroundIndex - 1 : 0;
-            
-            for (let i = startIndex; i < points.length; i++) {
-                filteredPoints.push(points[i]);
-                // Stop adding points once we are comfortably above the chart top
-                if (points[i].alt > maxChartAlt) break;
-            }
-            points = filteredPoints;
-
-            // 4. RENDER
+            // 5. Render Prep
             container.innerHTML = '<span class="y-axis-label">Altitude (ft)</span>'; 
             
-            const totalRange = maxChartAlt - surfaceElevation;
+            // The chart view range is strictly Ground -> 18k
+            const viewHeight = chartTop - surfaceElevation;
 
-            // Helper: Converts Altitude to % Position relative to the Chart Box
+            // Helper: Convert Feet to Percentage relative to the VIEWPORT
             function getPct(altitude) {
-                // (Value - Min) / Range * 100
-                return ((altitude - surfaceElevation) / totalRange) * 100;
+                // Example: If alt is 6000 (below ground 7000), result is negative %
+                return ((altitude - surfaceElevation) / viewHeight) * 100;
             }
             
             function getColor(s) {
@@ -198,68 +202,76 @@
                 return `hsl(${hue}, 70%, 50%)`;
             }
 
+            // 6. Draw Blocks
+            // We iterate through points. A point defines the BOTTOM of a layer.
+            // The layer extends up to the NEXT point's altitude.
+            
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
+                
+                // If this point is way above our chart top, stop.
+                // (But we allow one block to go "off the top" to fill the gap)
+                if (p.alt > chartTop + 2000) continue;
+
                 const nextP = points[i+1];
                 
-                // Calculate Bottom of this block
-                let bottomPct = getPct(p.alt);
+                // Calculate Start and End of this block
+                const bottomPct = getPct(p.alt);
                 
-                // Calculate Top of this block
                 let topPct;
                 if (nextP) {
                     topPct = getPct(nextP.alt);
                 } else {
-                    // For the highest block (500hPa), give it arbitrary height or cap at 100%
-                    topPct = 100; 
+                    // If no next point, extend upwards indefinitely (or just past chart top)
+                    topPct = 200; 
                 }
 
-                // VISUAL CLAMPING
-                // If the block starts underground (negative %), allow it, but CSS 'overflow:hidden' will crop it.
-                // However, for the text label, we want it visible.
-                
-                // The actual div height math:
-                const heightPct = topPct - bottomPct;
-                
-                // Don't draw blocks completely out of view
+                // Optimization: If the entire block is below ground or above top, skip DOM creation
                 if (topPct < 0) continue; 
                 if (bottomPct > 100) continue;
 
-                // Create Block
+                const heightPct = topPct - bottomPct;
+
+                // -- DRAW THE COLORED BLOCK --
                 const block = document.createElement('div');
                 block.className = 'wind-block';
                 block.style.bottom = `${bottomPct}%`;
                 block.style.height = `${heightPct}%`; 
                 block.style.backgroundColor = getColor(p.speed);
-                block.innerText = p.speed;
+                block.innerHTML = `<span class="block-value">${p.speed}</span>`;
+                block.title = `${p.level} hPa @ ${Math.round(p.alt)} ft`;
                 
-                // Create Axis Label
-                const label = document.createElement('div');
-                label.className = 'alt-label';
-                label.style.bottom = `${bottomPct}%`;
-                
-                // Smart Labeling
-                // If point is underground (800hPa), don't label it "6.4k" because that looks confusing below the "Ground" line.
-                // Only label points that are visually inside the chart area (> 0%)
-                if (bottomPct >= 0) {
-                     label.innerText = (p.alt / 1000).toFixed(1) + 'k';
-                     container.appendChild(label);
-                }
-
                 container.appendChild(block);
+                
+                // -- DRAW THE AXIS LABEL -- 
+                // We only draw labels for points that are visibly inside the chart area
+                // (0% to 100%).
+                if (bottomPct >= 0 && bottomPct <= 98) {
+                    const tick = document.createElement('div');
+                    tick.className = 'alt-tick';
+                    tick.style.bottom = `${bottomPct}%`;
+                    tick.innerText = (p.alt / 1000).toFixed(1) + 'k';
+                    
+                    const grid = document.createElement('div');
+                    grid.className = 'grid-line';
+                    grid.style.bottom = `${bottomPct}%`;
+
+                    container.appendChild(tick);
+                    container.appendChild(grid);
+                }
             }
-            
-            // Ground Badge
+
+            // 7. Ground UI
             const badge = document.createElement('div');
             badge.className = 'ground-badge';
             badge.innerText = `Ground: ${Math.round(surfaceElevation)} ft`;
             container.appendChild(badge);
 
-            // Top Label (18k / 19k)
+            // 8. Top Label
             const topLabel = document.createElement('div');
-            topLabel.className = 'alt-label';
-            topLabel.style.top = '-10px';
-            topLabel.innerText = (maxChartAlt / 1000) + 'k';
+            topLabel.className = 'alt-tick';
+            topLabel.style.top = '-8px'; // Just slightly off the top border
+            topLabel.innerText = '18.0k';
             container.appendChild(topLabel);
 
         } catch (err) {
