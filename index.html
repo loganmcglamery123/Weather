@@ -19,38 +19,35 @@
             padding: 30px;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 320px; /* Made slightly wider to accommodate the axis labels */
+            width: 320px;
             text-align: center;
         }
 
         h2 { margin: 0 0 10px 0; color: #333; font-size: 1.2rem; }
         p { color: #666; margin: 0 0 20px 0; font-size: 0.9rem; }
 
-        /* The Chart Container */
         .profile-container {
             position: relative;
             height: 600px; 
-            width: 85%; /* Reduced width slightly to make room for margin */
-            margin-left: 15%; /* Push chart right to make room for labels */
+            width: 85%;
+            margin-left: 15%;
             border-left: 2px solid #333;
             border-bottom: 2px solid #333;
             background: #fafafa;
             margin-bottom: 20px;
         }
 
-        /* Y-Axis Label - MOVED FURTHER LEFT */
         .y-axis-label {
             position: absolute;
             transform: rotate(-90deg);
-            left: -85px; /* Was -50px, moved to -85px to clear the numbers */
+            left: -85px;
             top: 50%;
             color: #555;
             font-weight: bold;
             font-size: 0.9rem;
-            white-space: nowrap; /* Prevents wrapping */
+            white-space: nowrap;
         }
 
-        /* X-Axis Label */
         .x-axis-label {
             margin-top: 5px;
             font-weight: bold;
@@ -58,7 +55,6 @@
             font-size: 0.9rem;
         }
 
-        /* Individual Data Blocks */
         .wind-block {
             position: absolute;
             left: 0;
@@ -82,23 +78,14 @@
             cursor: pointer;
         }
 
-        /* Altitude Tick Labels */
         .alt-label {
             position: absolute;
-            left: -50px; /* Slight adjust */
+            left: -50px;
             font-size: 0.75rem;
             color: #777;
             width: 45px;
             text-align: right;
             transform: translateY(50%); 
-        }
-
-        .loading { 
-            position: absolute; 
-            top: 50%; 
-            width: 100%; 
-            color: #888; 
-            font-style: italic; 
         }
     </style>
 </head>
@@ -110,7 +97,7 @@
 
         <div class="profile-container" id="chartArea">
             <span class="y-axis-label">Altitude (ft)</span>
-            <div class="loading">Loading Data...</div>
+            <div style="padding-top: 50%; color: #888;">Loading...</div>
         </div>
 
         <div class="x-axis-label">Wind Speed (mph)</div>
@@ -119,40 +106,46 @@
 <script>
     async function initChart() {
         const container = document.getElementById('chartArea');
-        // Your existing Open-Meteo URL
-        const url = "https://api.open-meteo.com/v1/forecast?latitude=35.1988&longitude=-111.6513&daily=sunrise,sunset&hourly=wind_speed_1000hPa,wind_speed_975hPa,wind_speed_950hPa,wind_speed_925hPa,wind_speed_900hPa,wind_speed_850hPa,wind_speed_800hPa,wind_speed_700hPa,wind_speed_600hPa,wind_speed_500hPa,geopotential_height_1000hPa,geopotential_height_500hPa,geopotential_height_975hPa,geopotential_height_600hPa,geopotential_height_950hPa,geopotential_height_925hPa,geopotential_height_850hPa,geopotential_height_900hPa,geopotential_height_800hPa,geopotential_height_700hPa&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
+        // Added 'elevation' to the requested fields just in case, though it comes in metadata anyway
+        const url = "https://api.open-meteo.com/v1/forecast?latitude=35.198&longitude=-111.651&hourly=wind_speed_1000hPa,wind_speed_975hPa,wind_speed_950hPa,wind_speed_925hPa,wind_speed_900hPa,wind_speed_850hPa,wind_speed_800hPa,wind_speed_700hPa,wind_speed_600hPa,wind_speed_500hPa,geopotential_height_1000hPa,geopotential_height_500hPa,geopotential_height_975hPa,geopotential_height_600hPa,geopotential_height_950hPa,geopotential_height_925hPa,geopotential_height_850hPa,geopotential_height_900hPa,geopotential_height_800hPa,geopotential_height_700hPa&timezone=auto&forecast_days=1&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
 
         try {
             const response = await fetch(url);
             const data = await response.json();
 
-            // 1. Get Current Hour Index
+            // 1. Get Surface Elevation (Meters -> Feet)
+            // Open-Meteo returns the elevation of the requested coordinate in the metadata
+            const surfaceElevation = data.elevation * 3.28084;
+            console.log("Location Elevation:", surfaceElevation);
+
+            // 2. Get Current Hour Index
             const now = new Date();
             const currentHourISO = now.toISOString().slice(0, 13);
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
             if (tIndex === -1) tIndex = 0;
 
-            // 2. Prepare Data Array
             const levels = [1000, 975, 950, 925, 900, 850, 800, 700, 600, 500];
             
             let points = levels.map(level => {
                 const altValue = data.hourly[`geopotential_height_${level}hPa`][tIndex];
                 return {
                     speed: data.hourly[`wind_speed_${level}hPa`][tIndex],
-                    alt: altValue // Using raw value (Feet)
+                    alt: altValue 
                 };
             });
+
+            // 3. FILTER: Remove points below ground
+            // We give a small buffer (e.g. -100ft) just in case the model is slightly off
+            points = points.filter(p => p.alt > (surfaceElevation - 100));
 
             // Sort by Altitude (Low to High)
             points.sort((a, b) => a.alt - b.alt);
 
-            // 3. Render
-            // Clear loading, but keep the axis label
+            // Render
             container.innerHTML = '<span class="y-axis-label">Altitude (ft)</span>'; 
             
-            const maxAlt = 20000; // Cap at 20,000ft
+            const maxAlt = 20000; 
             
-            // Color Helper
             function getColor(s) {
                 let hue = 140 - (s * 4); 
                 if (hue < 0) hue = 0; 
@@ -175,7 +168,6 @@
                 
                 const heightPct = topPct - bottomPct;
 
-                // Block
                 const block = document.createElement('div');
                 block.className = 'wind-block';
                 block.style.bottom = `${bottomPct}%`;
@@ -183,7 +175,6 @@
                 block.style.backgroundColor = getColor(p.speed);
                 block.innerHTML = `${p.speed}`; 
                 
-                // Axis Label
                 const label = document.createElement('div');
                 label.className = 'alt-label';
                 label.style.bottom = `${bottomPct}%`;
@@ -192,6 +183,15 @@
                 container.appendChild(block);
                 container.appendChild(label);
             }
+            
+            // Add a "Ground Level" marker line if needed
+            const groundLine = document.createElement('div');
+            groundLine.style.position = 'absolute';
+            groundLine.style.bottom = `${(surfaceElevation / maxAlt) * 100}%`;
+            groundLine.style.width = '100%';
+            groundLine.style.borderBottom = '2px dashed #555';
+            groundLine.title = "Ground Level";
+            container.appendChild(groundLine);
 
         } catch (err) {
             console.error(err);
