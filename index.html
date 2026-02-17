@@ -128,7 +128,7 @@
 
     /* Emoji label colors */
     .freezing-label { fill: #0066ff; font-size: 0.7rem; font-weight: bold; }
-    .boundary-label { fill: #000;    font-size: 0.7rem; font-weight: bold; }
+    .boundary-label { fill: #000;    font-size: 0.7rem; font-weight: bold; } /* used for TOL now */
     .cloud-label    { fill: #555;    font-size: 0.7rem; font-weight: bold; }
     .elev-label     { fill: #2e7d32; font-size: 0.7rem; font-weight: bold; }
   </style>
@@ -136,7 +136,7 @@
 <body>
   <div class="card">
     <h2 id="titleLine">Vertical Profile</h2>
-    <p>Wind, Temp, Cloud Base & Boundary Layer</p>
+    <p>Wind, Temp, Cloud Base & Lift Tops</p>
 
     <div class="controls">
       <label for="modelSelect">Model:</label>
@@ -223,6 +223,37 @@
       return bestI;
     }
 
+    // ----- Thermo helpers (units: K, m) -----
+    const FtoK = (f) => (Number(f) - 32) * (5/9) + 273.15;
+    const KtoC = (k) => Number(k) - 273.15;
+
+    // Bolton-style LCL temperature (K) from T(K) and Td(K)
+    function lclTempK(Tk, Tdk) {
+      if (!Number.isFinite(Tk) || !Number.isFinite(Tdk)) return null;
+      // guard against weird inversions
+      const Td = Math.min(Tdk, Tk);
+      const inv = (1 / (Td - 56)) + (Math.log(Tk / Td) / 800);
+      if (!Number.isFinite(inv) || inv === 0) return null;
+      return (1 / inv) + 56;
+    }
+
+    // Approx LCL height (m AGL) using dry-adiabatic to Tlcl
+    function lclHeightM(Tk, TlclK) {
+      const Gamma_d = 0.0098; // K/m
+      if (!Number.isFinite(Tk) || !Number.isFinite(TlclK)) return null;
+      const dz = (Tk - TlclK) / Gamma_d;
+      return Math.max(0, dz);
+    }
+
+    // Simple parcel temperature profile (K) as function of height z (m AGL)
+    function parcelTempK_atZ(T0K, TlclK, zlclM, zM) {
+      const Gamma_d = 0.0098;  // K/m
+      const Gamma_m = 0.0065;  // K/m (simple moist lapse proxy)
+      if (!Number.isFinite(T0K) || !Number.isFinite(TlclK) || !Number.isFinite(zlclM) || !Number.isFinite(zM)) return null;
+      if (zM <= zlclM) return T0K - Gamma_d * zM;
+      return TlclK - Gamma_m * (zM - zlclM);
+    }
+
     async function initChart(selectedModel = "") {
       const titleEl = document.getElementById("titleLine");
       const container = document.getElementById('chartArea');
@@ -240,12 +271,19 @@
       const currentElevationFt = Number.isFinite(altRaw) ? (altRaw * mToFt) : null;
 
       const levels = [1000, 975, 950, 925, 900, 875, 850, 825, 800, 775, 750, 725, 700, 675, 650, 625, 600, 575, 550, 525, 500];
-      let hourlyParams = ["freezing_level_height", "boundary_layer_height", "temperature_2m", "dew_point_2m"];
+
+      // NOTE: removed boundary_layer_height from request
+      let hourlyParams = ["freezing_level_height", "temperature_2m", "dew_point_2m"];
       levels.forEach(l => {
-        hourlyParams.push(`wind_speed_${l}hPa`, `wind_direction_${l}hPa`, `geopotential_height_${l}hPa`, `temperature_${l}hPa`);
+        hourlyParams.push(
+          `wind_speed_${l}hPa`,
+          `wind_direction_${l}hPa`,
+          `geopotential_height_${l}hPa`,
+          `temperature_${l}hPa`
+        );
       });
 
-      // NEW: minutely_15 params (lower level)
+      // minutely_15 params (lower level)
       const min15Params = [
         "wind_speed_10m",
         "wind_speed_80m",
@@ -265,7 +303,7 @@
         `?latitude=${encodeURIComponent(latitude)}` +
         `&longitude=${encodeURIComponent(longitude)}` +
         `&hourly=${encodeURIComponent(hourlyParams.join(','))}` +
-        `&minutely_15=${encodeURIComponent(min15Params.join(','))}` +   // NEW
+        `&minutely_15=${encodeURIComponent(min15Params.join(','))}` +
         `&timezone=auto&forecast_days=1` +
         `&wind_speed_unit=mph&temperature_unit=fahrenheit` +
         modelParam;
@@ -286,7 +324,7 @@
         const tIndex = nearestIndex(data?.hourly?.time || [], nowMs);
         const forecastTimeStr = data.hourly.time[tIndex];
 
-        // minutely_15 index (nearest to now)
+        // minutely_15 index
         const mIndex = nearestIndex(data?.minutely_15?.time || [], nowMs);
 
         const surfaceElevationFt = data.elevation * mToFt;
@@ -296,34 +334,82 @@
         titleEl.textContent = `Vertical Profile • ${coordsStr} • Elev ${elevStr} • ${forecastTimeStr}`;
 
         const freezingLevelFt = data.hourly.freezing_level_height[tIndex] * mToFt;
-        const blHeightMSL = surfaceElevationFt + (data.hourly.boundary_layer_height[tIndex] * mToFt);
 
-        const t2m = data.hourly.temperature_2m[tIndex];
-        const dp2m = data.hourly.dew_point_2m[tIndex];
-        const cloudBaseMSL = surfaceElevationFt + (((t2m - dp2m) / 4.4) * 1000);
+        // ----- LCL-based cumulus base (MSL ft) -----
+        const t2mF = data.hourly.temperature_2m[tIndex];
+        const dp2mF = data.hourly.dew_point_2m[tIndex];
+
+        const T0K = FtoK(t2mF);
+        const Td0K = FtoK(dp2mF);
+        const TlclK = lclTempK(T0K, Td0K);
+        const zlclM = lclHeightM(T0K, TlclK);
+        const lclMSL_ft = (Number.isFinite(zlclM) ? (surfaceElevationFt + zlclM * mToFt) : null);
+
+        // ----- Build environment profile (z AGL in m, Tenv in K) -----
+        // Add surface point at z=0 using 2m temp
+        let prof = [];
+        if (Number.isFinite(T0K)) prof.push({ zM: 0, TenvK: T0K });
+
+        levels.forEach(level => {
+          const a_gpm = data.hourly[`geopotential_height_${level}hPa`]?.[tIndex];
+          const tf = data.hourly[`temperature_${level}hPa`]?.[tIndex];
+          if (!Number.isFinite(a_gpm) || !Number.isFinite(tf)) return;
+          const altFtMSL = a_gpm * mToFt;
+          const zM = (altFtMSL - surfaceElevationFt) / mToFt; // AGL meters
+          if (!Number.isFinite(zM)) return;
+          prof.push({ zM, TenvK: FtoK(tf) });
+        });
+
+        prof = prof
+          .filter(p => Number.isFinite(p.zM) && Number.isFinite(p.TenvK))
+          .sort((a, b) => a.zM - b.zM);
+
+        // ----- Compute TOL (Top of Usable Lift) -----
+        // Heuristic:
+        //   - compute parcel temp at each profile height
+        //   - find highest level where parcel is at least +0.5°C warmer than environment (usable buoyancy)
+        // This behaves much closer to "lift tops" than generic PBLH, and collapses at night more often.
+        let tolMSL_ft = null;
+        if (prof.length >= 3 && Number.isFinite(T0K) && Number.isFinite(TlclK) && Number.isFinite(zlclM)) {
+          const usableDeltaK = 0.5; // ~0.5°C threshold for "usable" lift (tunable)
+          let bestZ = null;
+
+          for (const p of prof) {
+            if (p.zM < 0) continue;
+            const Tp = parcelTempK_atZ(T0K, TlclK, zlclM, p.zM);
+            if (!Number.isFinite(Tp)) continue;
+            const dK = Tp - p.TenvK;
+            if (dK >= usableDeltaK) bestZ = p.zM;
+          }
+
+          if (Number.isFinite(bestZ)) {
+            tolMSL_ft = surfaceElevationFt + bestZ * mToFt;
+          }
+        }
 
         /* =============================
            Y-AXIS SCALING
            Bottom: ground elevation
-           Top: max( current alt, cloud base, boundary, freezing ) + 1000 ft
+           Top: max( current alt, LCL cloud base, TOL, freezing ) + 1000 ft
            ============================= */
         const topCandidate = Math.max(
           Number.isFinite(currentElevationFt) ? currentElevationFt : surfaceElevationFt,
-          Number.isFinite(cloudBaseMSL) ? cloudBaseMSL : surfaceElevationFt,
-          Number.isFinite(blHeightMSL) ? blHeightMSL : surfaceElevationFt,
+          Number.isFinite(lclMSL_ft) ? lclMSL_ft : surfaceElevationFt,
+          Number.isFinite(tolMSL_ft) ? tolMSL_ft : surfaceElevationFt,
           Number.isFinite(freezingLevelFt) ? freezingLevelFt : surfaceElevationFt
         );
         const chartTop = Math.ceil((topCandidate + 1000) / 1000) * 1000;
 
-        // pressure-level points
+        // pressure-level wind points
         let points = levels.map(level => {
-          const s = data.hourly[`wind_speed_${level}hPa`][tIndex];
-          const d = data.hourly[`wind_direction_${level}hPa`][tIndex];
-          const a_gpm = data.hourly[`geopotential_height_${level}hPa`][tIndex];
+          const s = data.hourly[`wind_speed_${level}hPa`]?.[tIndex];
+          const d = data.hourly[`wind_direction_${level}hPa`]?.[tIndex];
+          const a_gpm = data.hourly[`geopotential_height_${level}hPa`]?.[tIndex];
+          if (!Number.isFinite(s) || !Number.isFinite(d) || !Number.isFinite(a_gpm)) return null;
           return { speed: s, dir: d, alt: a_gpm * mToFt };
-        }).filter(p => p.speed !== null && p.alt !== null);
+        }).filter(Boolean);
 
-        // NEW: add 10m / 80m points from minutely_15 (altitudes are AGL -> convert to MSL)
+        // add 10m / 80m points from minutely_15
         const hasMin15 = !!data?.minutely_15;
         if (hasMin15) {
           const s10 = data.minutely_15.wind_speed_10m?.[mIndex];
@@ -352,7 +438,6 @@
           }
         }
 
-        // sort after adding min-level points
         points = points.sort((a, b) => a.alt - b.alt);
 
         mask.innerHTML = '';
@@ -391,7 +476,7 @@
             const toDirMet = (p.dir + 180) % 360;    // meteorological "to" direction (0=N)
             const rotDeg   = (toDirMet + 270) % 360; // convert to CSS rotation for ➤ (0=E)
 
-            const tagStr = p.tag ? ` <span style="opacity:0.75;font-weight:800;font-size:0.85em">(${p.tag})</span>` : "";
+            const tagStr  = p.tag ? ` <span style="opacity:0.75;font-weight:800;font-size:0.85em">(${p.tag})</span>` : "";
             const gustStr = (p.tag === "10m" && Number.isFinite(p.gust)) ? ` <span style="opacity:0.75;font-weight:900">G${Math.round(p.gust)}</span>` : "";
 
             label.innerHTML =
@@ -420,20 +505,27 @@
           svg.appendChild(t);
         }
 
+        // Markers
         drawEmojiMarker(freezingLevelFt, "freezing-label", "❄️", 1);
-        drawEmojiMarker(blHeightMSL, "boundary-label", "🚀", 1);
-        drawEmojiMarker(cloudBaseMSL, "cloud-label", "☁️", 1);
+
+        // REPLACED: boundary layer -> TOL
+        // (rocket emoji retained; it now means Top of Usable Lift)
+        if (Number.isFinite(tolMSL_ft)) drawEmojiMarker(tolMSL_ft, "boundary-label", "🚀", 1);
+
+        // REPLACED: cloud base -> LCL cumulus base
+        if (Number.isFinite(lclMSL_ft)) drawEmojiMarker(lclMSL_ft, "cloud-label", "☁️", 1);
+
         if (Number.isFinite(currentElevationFt)) drawEmojiMarker(currentElevationFt, "elev-label", "🪂", 1);
 
         /* =============================
            TICKS
-           Include: ground, 1000s, and the four feature altitudes
+           Include: ground, 1000s, and feature altitudes
            ============================= */
         const special = [
           surfaceElevationFt,
           Number.isFinite(currentElevationFt) ? currentElevationFt : null,
-          Number.isFinite(cloudBaseMSL) ? cloudBaseMSL : null,
-          Number.isFinite(blHeightMSL) ? blHeightMSL : null,
+          Number.isFinite(lclMSL_ft) ? lclMSL_ft : null,
+          Number.isFinite(tolMSL_ft) ? tolMSL_ft : null,
           Number.isFinite(freezingLevelFt) ? freezingLevelFt : null
         ].filter(v => Number.isFinite(v));
 
@@ -462,6 +554,7 @@
           container.appendChild(tick);
           container.appendChild(grid);
         });
+
       } catch (e) {
         console.error(e);
       }
