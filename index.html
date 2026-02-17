@@ -24,8 +24,8 @@
       position: relative;
     }
 
-    h2 { margin: 0 0 5px 0; color: #333; font-size: 1.4rem; }
-    p { color: #666; margin: 0 0 14px 0; font-size: 0.9rem; }
+    h2 { margin: 0 0 6px 0; color: #333; font-size: 1.25rem; line-height: 1.25; }
+    p  { color: #666; margin: 0 0 14px 0; font-size: 0.9rem; }
 
     .controls{
       display:flex; gap:10px; align-items:center; justify-content:center;
@@ -89,12 +89,24 @@
       left: 0; width: 100%;
       text-align: center;
       color: white;
-      font-weight: 800;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-      font-size: 0.95rem;
+      font-weight: 900;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+      font-size: 1.05rem;
       z-index: 5;
       pointer-events: none;
       transform: translateY(50%);
+      letter-spacing: 0.2px;
+    }
+
+    /* Bigger/bolder arrow */
+    .wind-arrow {
+      display:inline-block;
+      font-size: 1.35em;
+      font-weight: 1000;
+      line-height: 1;
+      transform-origin: 50% 55%;
+      filter: drop-shadow(0 1px 1px rgba(0,0,0,0.4));
+      margin-left: 6px;
     }
 
     .alt-tick {
@@ -141,7 +153,7 @@
 </head>
 <body>
   <div class="card">
-    <h2>Vertical Profile</h2>
+    <h2 id="titleLine">Vertical Profile</h2>
     <p>Wind, Temp, Cloud Base & Boundary Layer</p>
 
     <div class="controls">
@@ -177,19 +189,18 @@
     // Windy-ish continuous ramp
     // ----------------------------
     function getColor(speed) {
-      // mph -> RGB stops (tweak as desired)
       const stops = [
-        { s: 0,  c: [ 35,  75, 190] }, // deep blue
-        { s: 5,  c: [ 45, 140, 220] }, // blue
-        { s: 10, c: [ 80, 200, 255] }, // cyan
-        { s: 15, c: [ 60, 210, 140] }, // green-cyan
-        { s: 20, c: [ 40, 200,  60] }, // green
-        { s: 25, c: [180, 220,  40] }, // yellow-green
-        { s: 30, c: [255, 200,  40] }, // yellow/orange
-        { s: 35, c: [255, 140,  40] }, // orange
-        { s: 45, c: [235,  60,  60] }, // red
-        { s: 60, c: [190,  60, 170] }, // magenta
-        { s: 80, c: [140,  60, 220] }  // purple
+        { s: 0,  c: [ 35,  75, 190] },
+        { s: 5,  c: [ 45, 140, 220] },
+        { s: 10, c: [ 80, 200, 255] },
+        { s: 15, c: [ 60, 210, 140] },
+        { s: 20, c: [ 40, 200,  60] },
+        { s: 25, c: [180, 220,  40] },
+        { s: 30, c: [255, 200,  40] },
+        { s: 35, c: [255, 140,  40] },
+        { s: 45, c: [235,  60,  60] },
+        { s: 60, c: [190,  60, 170] },
+        { s: 80, c: [140,  60, 220] }
       ];
 
       const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -204,7 +215,6 @@
       const x = clamp(Number(speed) || 0, stops[0].s, stops[stops.length - 1].s);
       let i = 0;
       while (i < stops.length - 1 && x > stops[i + 1].s) i++;
-
       const a = stops[i];
       const b = stops[i + 1];
       const t = (x - a.s) / (b.s - a.s || 1);
@@ -219,7 +229,13 @@
       return v; // "" means auto
     }
 
+    function formatLatLon(lat, lon) {
+      const f = (x) => (Math.round(x * 10000) / 10000).toFixed(4);
+      return `${f(lat)}, ${f(lon)}`;
+    }
+
     async function initChart(selectedModel = "") {
+      const titleEl = document.getElementById("titleLine");
       const container = document.getElementById('chartArea');
       const mask = document.getElementById('chartMask');
       const svg = document.getElementById('svgLayer');
@@ -245,7 +261,6 @@
       const latitude = hasFix ? lat : 35.198;
       const longitude = hasFix ? lon : -111.651;
 
-      // Add &models= only if user chose a model
       const modelParam = selectedModel ? `&models=${encodeURIComponent(selectedModel)}` : "";
 
       const url =
@@ -267,28 +282,38 @@
           return;
         }
 
+        // ---- FIXED TIME INDEX: choose nearest forecast hour to now using epoch ms
+        const nowMs = Date.now();
+        const timesMs = data.hourly.time.map(t => new Date(t).getTime());
+        let tIndex = 0;
+        let best = Infinity;
+        for (let i = 0; i < timesMs.length; i++) {
+          const d = Math.abs(timesMs[i] - nowMs);
+          if (d < best) { best = d; tIndex = i; }
+        }
+        const forecastTimeStr = data.hourly.time[tIndex]; // local time string (timezone=auto)
+
         const surfaceElevationFt = data.elevation * mToFt;
         const chartTop = 18000;
 
-        const now = new Date();
-        const currentHourISO = now.toISOString().slice(0, 13);
-        let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
-        if (tIndex === -1) tIndex = 0;
+        // ---- Title: coordinates, elevation, forecast time
+        const coordsStr = formatLatLon(latitude, longitude);
+        const elevStr = `${Math.round(surfaceElevationFt)} ft`;
+        titleEl.textContent = `Vertical Profile • ${coordsStr} • Elev ${elevStr} • ${forecastTimeStr}`;
 
         const freezingLevelFt = data.hourly.freezing_level_height[tIndex] * mToFt; // ft MSL
         const blHeightMSL = surfaceElevationFt + (data.hourly.boundary_layer_height[tIndex] * mToFt); // ft MSL
 
         const t2m = data.hourly.temperature_2m[tIndex];
         const dp2m = data.hourly.dew_point_2m[tIndex];
-        // Cloud base estimate (ft AGL) ~= ((T - Td)/4.4)*1000; convert to MSL by adding surface
-        const cloudBaseMSL = surfaceElevationFt + (((t2m - dp2m) / 4.4) * 1000);
+        const cloudBaseMSL = surfaceElevationFt + (((t2m - dp2m) / 4.4) * 1000); // ft MSL
 
         let points = levels.map(level => {
           const s = data.hourly[`wind_speed_${level}hPa`][tIndex];
           const d = data.hourly[`wind_direction_${level}hPa`][tIndex];
-          const a_m = data.hourly[`geopotential_height_${level}hPa`][tIndex]; // meters
+          const a_gpm = data.hourly[`geopotential_height_${level}hPa`][tIndex]; // geopotential meters (gpm), unit "m"
           const t = data.hourly[`temperature_${level}hPa`][tIndex];
-          return { speed: s, dir: d, alt: a_m * mToFt, temp: t };
+          return { speed: s, dir: d, alt: a_gpm * mToFt, temp: t };
         }).filter(p => p.speed !== null && p.alt !== null).sort((a, b) => a.alt - b.alt);
 
         // Clear layers
@@ -324,7 +349,9 @@
             const label = document.createElement('div');
             label.className = 'data-label';
             label.style.bottom = `${center}%`;
-            label.innerHTML = `${Math.round(p.speed)} <span style="display:inline-block; transform:rotate(${p.dir}deg)">↓</span>`;
+            label.innerHTML =
+              `${Math.round(p.speed)} ` +
+              `<span class="wind-arrow" style="transform:rotate(${p.dir}deg)">↓</span>`;
             container.appendChild(label);
 
             const tTick = document.createElement('div');
@@ -362,7 +389,6 @@
         drawLine(blHeightMSL, "boundary-line", "BOUNDARY");
         drawLine(cloudBaseMSL, "cloud-line", "CLOUD BASE");
 
-        // Current Elevation from XCTrack alt (ft MSL)
         if (Number.isFinite(currentElevationFt)) {
           drawLine(currentElevationFt, "elev-line", `CURRENT ELEV (${Math.round(currentElevationFt)} ft)`);
         }
@@ -397,7 +423,6 @@
     // restore previous
     const saved = localStorage.getItem("openmeteo_model") || "";
     if (saved) {
-      // if saved matches an option, select it; otherwise set custom
       const opts = Array.from(modelSelect.options).map(o => o.value);
       if (opts.includes(saved)) {
         modelSelect.value = saved;
