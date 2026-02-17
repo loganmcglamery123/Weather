@@ -308,9 +308,9 @@
         const getAltPct = (altFtMSL) => ((altFtMSL - surfaceElevationFt) / viewHeight) * 100;
 
         points.forEach((p, i) => {
-          if (p.alt > chartTop + 1000) return;
-
-          const nextAlt = points[i + 1] ? points[i + 1].alt : chartTop + 2000;
+          if (p.alt > chartTop) return;
+          
+          const nextAlt = points[i + 1] ? Math.min(points[i + 1].alt, chartTop) : chartTop;
           const bottomPct = getAltPct(p.alt);
           const topPct = getAltPct(nextAlt);
           const heightPct = topPct - bottomPct;
@@ -328,17 +328,21 @@
           const vTop = Math.min(topPct, 100);
           if (vTop - vBottom > 3.0) {
             const center = vBottom + (vTop - vBottom) / 2;
-
+          
             const label = document.createElement('div');
             label.className = 'data-label';
             label.style.bottom = `${center}%`;
-            const toDirMet = (p.dir + 180) % 360;          // 0=N,90=E,180=S,270=W
-            const rotDeg   = (toDirMet + 270) % 360;       // convert to CSS for ➤ (0=E)
+          
+            const toDirMet = (p.dir + 180) % 360;    // meteorological "to" direction (0=N)
+            const rotDeg   = (toDirMet + 270) % 360; // convert to CSS rotation for ➤ (0=E)
+          
             label.innerHTML =
               `${Math.round(p.speed)} ` +
               `<span class="wind-arrow" style="transform:rotate(${rotDeg}deg)">➤</span>`;
-
+          
+            container.appendChild(label);
           }
+
         });
 
         function drawEmojiMarker(altFtMSL, css, emoji, count, xPx = 6) {
