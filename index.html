@@ -268,7 +268,6 @@
         const forecastTimeStr = data.hourly.time[tIndex];
 
         const surfaceElevationFt = data.elevation * mToFt;
-        const chartTop = 18000;
 
         const coordsStr = formatLatLon(latitude, longitude);
         const elevStr = `${Math.round(surfaceElevationFt)} ft`;
@@ -280,6 +279,19 @@
         const t2m = data.hourly.temperature_2m[tIndex];
         const dp2m = data.hourly.dew_point_2m[tIndex];
         const cloudBaseMSL = surfaceElevationFt + (((t2m - dp2m) / 4.4) * 1000);
+
+        /* =============================
+           Y-AXIS SCALING (NEW)
+           Bottom: ground elevation
+           Top: max( current alt, cloud base, boundary, freezing ) + 1000 ft
+           ============================= */
+        const topCandidate = Math.max(
+          Number.isFinite(currentElevationFt) ? currentElevationFt : surfaceElevationFt,
+          Number.isFinite(cloudBaseMSL) ? cloudBaseMSL : surfaceElevationFt,
+          Number.isFinite(blHeightMSL) ? blHeightMSL : surfaceElevationFt,
+          Number.isFinite(freezingLevelFt) ? freezingLevelFt : surfaceElevationFt
+        );
+        const chartTop = Math.ceil((topCandidate + 1000) / 1000) * 1000;
 
         let points = levels.map(level => {
           const s = data.hourly[`wind_speed_${level}hPa`][tIndex];
@@ -350,14 +362,39 @@
         drawEmojiMarker(cloudBaseMSL, "cloud-label", "☁️", 1);
         if (Number.isFinite(currentElevationFt)) drawEmojiMarker(currentElevationFt, "elev-label", "🪂", 1);
 
-        for (let a = Math.ceil(surfaceElevationFt / 1000) * 1000; a <= chartTop; a += 1000) {
+        /* =============================
+           TICKS (NEW)
+           Include: ground, 1000s, and the four feature altitudes
+           ============================= */
+        const special = [
+          surfaceElevationFt,
+          Number.isFinite(currentElevationFt) ? currentElevationFt : null,
+          Number.isFinite(cloudBaseMSL) ? cloudBaseMSL : null,
+          Number.isFinite(blHeightMSL) ? blHeightMSL : null,
+          Number.isFinite(freezingLevelFt) ? freezingLevelFt : null
+        ].filter(v => Number.isFinite(v));
+
+        // 1000-ft ticks from next 1000 above ground up to chartTop
+        const ticks = new Set();
+        ticks.add(Math.round(surfaceElevationFt));
+
+        const startK = Math.ceil(surfaceElevationFt / 1000) * 1000;
+        for (let a = startK; a <= chartTop; a += 1000) ticks.add(Math.round(a));
+
+        // Add special altitudes (as exact ints)
+        special.forEach(v => ticks.add(Math.round(v)));
+
+        // Sorted tick list
+        const tickVals = Array.from(ticks).sort((a, b) => a - b);
+
+        tickVals.forEach(a => {
           const pct = getAltPct(a);
-          if (pct < 3.5) continue;
+          if (pct < 0 || pct > 100) return;
 
           const tick = document.createElement('div');
           tick.className = 'alt-tick';
           tick.style.bottom = `${pct}%`;
-          tick.innerText = Math.round(a);
+          tick.innerText = a;
 
           const grid = document.createElement('div');
           grid.className = 'grid-line';
@@ -365,7 +402,7 @@
 
           container.appendChild(tick);
           container.appendChild(grid);
-        }
+        });
       } catch (e) {
         console.error(e);
       }
