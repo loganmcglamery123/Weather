@@ -362,7 +362,8 @@
           }
         });
 
-        function drawLine(altFtMSL, css, txt) {
+        // Add icons to line labels (emoji are simplest + work offline)
+        function drawLine(altFtMSL, css, txt, icon) {
           if (!Number.isFinite(altFtMSL)) return;
           const pct = getAltPct(altFtMSL);
           if (pct < 0 || pct > 100) return;
@@ -381,16 +382,16 @@
           t.setAttribute("x", "5px");
           t.setAttribute("y", `${yPos - 1}%`);
           t.setAttribute("class", css.replace('-line', '-label'));
-          t.textContent = txt;
+          t.textContent = `${icon} ${txt}`;
           svg.appendChild(t);
         }
 
-        drawLine(freezingLevelFt, "freezing-line", "FREEZING");
-        drawLine(blHeightMSL, "boundary-line", "BOUNDARY");
-        drawLine(cloudBaseMSL, "cloud-line", "CLOUD BASE");
+        drawLine(freezingLevelFt, "freezing-line", "FREEZING", "❄️");
+        drawLine(blHeightMSL, "boundary-line", "BOUNDARY", "🚀");
+        drawLine(cloudBaseMSL, "cloud-line", "CLOUD BASE", "☁️");
 
         if (Number.isFinite(currentElevationFt)) {
-          drawLine(currentElevationFt, "elev-line", `CURRENT ELEV (${Math.round(currentElevationFt)} ft)`);
+          drawLine(currentElevationFt, "elev-line", `CURRENT ELEV (${Math.round(currentElevationFt)} ft)`, "🪂");
         }
 
         // Ticks
