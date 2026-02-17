@@ -19,7 +19,7 @@
             padding: 30px;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 380px; /* Widened slightly for arrows */
+            width: 380px; 
             text-align: center;
         }
 
@@ -30,13 +30,14 @@
             position: relative;
             height: 600px; 
             width: 70%;
-            margin-left: 30%; /* More room for labels */
+            margin-left: 30%; 
             border-left: 2px solid #333;
             border-bottom: 2px solid #333;
             background: #fafafa;
             margin-bottom: 20px;
         }
 
+        /* Inner Mask (Only for colors, not text) */
         .clipping-mask {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -62,37 +63,39 @@
             font-size: 0.9rem;
         }
 
-        /* The Colored Blocks */
+        /* The Colored Blocks (No text inside anymore) */
         .wind-block {
             position: absolute;
             left: 0;
             width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-            font-size: 0.9rem; 
-            box-sizing: border-box;
+            background-color: #ccc; /* fallback */
             border-top: 1px dotted rgba(255,255,255,0.3); 
-            transition: all 0.2s;
+            transition: opacity 0.2s;
         }
         
         .wind-block:hover {
-            width: 105%; 
-            z-index: 10;
-            box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
-            cursor: crosshair;
+            opacity: 0.9;
         }
 
-        /* The Arrow Icon */
+        /* The Floating Data Labels (New Layer) */
+        .data-label {
+            position: absolute;
+            left: 0; 
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+            font-size: 0.9rem;
+            z-index: 2; /* Sits on top of mask */
+            pointer-events: none; /* Let clicks pass through to the bar */
+            transform: translateY(50%); /* Center vert on the point */
+        }
+
         .wind-arrow {
             display: inline-block;
-            margin-left: 8px;
+            margin-left: 6px;
             font-size: 1.1em;
-            /* We use a simple Unicode arrow. 
-               Transform origin center allows smooth rotation */
             transform-origin: center;
         }
 
@@ -132,12 +135,12 @@
 
     <div class="card">
         <h2>Vertical Wind Profile</h2>
-        <p>Speed & Direction (High-Res)</p>
+        <p>Speed & Direction (Fixed Clipping)</p>
 
         <div class="chart-frame" id="chartArea">
             <span class="y-axis-label">Altitude (ft)</span>
             <div class="clipping-mask" id="chartMask"></div>
-        </div>
+            </div>
 
         <div class="x-axis-label">Wind Speed (mph)</div>
     </div>
@@ -147,18 +150,16 @@
         const container = document.getElementById('chartArea');
         const mask = document.getElementById('chartMask');
         
-        // 1. Levels
         const levels = [
             1000, 975, 950, 925, 900, 875, 850, 825, 800, 
             775, 750, 725, 700, 675, 650, 625, 600, 
             575, 550, 525, 500
         ];
 
-        // 2. Build URL (Added wind_direction)
         let hourlyParams = [];
         levels.forEach(l => {
             hourlyParams.push(`wind_speed_${l}hPa`);
-            hourlyParams.push(`wind_direction_${l}hPa`); // NEW
+            hourlyParams.push(`wind_direction_${l}hPa`);
             hourlyParams.push(`geopotential_height_${l}hPa`);
         });
         
@@ -171,7 +172,7 @@
             if (!response.ok) throw new Error("API Limit or Error");
             const data = await response.json();
 
-            // 3. Setup
+            // Constants
             const surfaceElevation = data.elevation * 3.28084; 
             const chartTop = 18000; 
             
@@ -180,10 +181,9 @@
             let tIndex = data.hourly.time.findIndex(t => t.startsWith(currentHourISO));
             if (tIndex === -1) tIndex = 0;
 
-            // 4. Extract Data (Including Direction)
             let points = levels.map(level => {
                 const s = data.hourly[`wind_speed_${level}hPa`];
-                const d = data.hourly[`wind_direction_${level}hPa`]; // NEW
+                const d = data.hourly[`wind_direction_${level}hPa`];
                 const a = data.hourly[`geopotential_height_${level}hPa`];
 
                 if (!s || !a || !d) return null;
@@ -203,9 +203,9 @@
             }
             points.sort((a, b) => a.alt - b.alt);
 
-            // 5. Render Prep
+            // Clear previous render
             mask.innerHTML = ''; 
-            container.querySelectorAll('.alt-tick, .grid-line').forEach(el => el.remove());
+            container.querySelectorAll('.alt-tick, .grid-line, .data-label').forEach(el => el.remove());
 
             const viewHeight = chartTop - surfaceElevation;
 
@@ -220,44 +220,53 @@
                 return `hsl(${hue}, 70%, 50%)`;
             }
 
-            // 6. Draw Blocks
+            // --- MAIN RENDER LOOP ---
             for (let i = 0; i < points.length; i++) {
                 const p = points[i];
                 if (p.alt > chartTop + 1000) continue;
 
                 const nextP = points[i+1];
-                const bottomPct = getPct(p.alt);
-                let topPct = nextP ? getPct(nextP.alt) : 200;
+                
+                // 1. Calculate REAL math positions (for the bar)
+                const realBottomPct = getPct(p.alt);
+                const realTopPct = nextP ? getPct(nextP.alt) : 200; // 200 extends way up
 
-                if (topPct < 0 || bottomPct > 100) continue;
+                // Skip if completely off screen
+                if (realTopPct < 0 || realBottomPct > 100) continue;
 
-                const heightPct = topPct - bottomPct;
+                const heightPct = realTopPct - realBottomPct;
 
+                // 2. Draw Color Block (Inside Mask)
                 const block = document.createElement('div');
                 block.className = 'wind-block';
-                block.style.bottom = `${bottomPct}%`;
+                block.style.bottom = `${realBottomPct}%`;
                 block.style.height = `${heightPct}%`; 
                 block.style.backgroundColor = getColor(p.speed);
-                
-                // Show content if block is large enough
-                if (heightPct > 3) {
-                    // Start arrow pointing DOWN (↓). 
-                    // 0deg wind = North Wind (Blows South) = Point Down.
-                    // So we can just rotate by the Direction degrees directly.
-                    // Example: Wind 270 (West) -> Rotate 270 -> Points Right. Correct.
+                block.title = `Alt: ${Math.round(p.alt)}ft | Speed: ${p.speed}mph | Dir: ${p.dir}°`;
+                mask.appendChild(block);
+
+                // 3. Draw Text Label (Outside Mask - VISIBLE CENTER)
+                // We calculate the center of the "Visible" part of the bar
+                const visualBottom = Math.max(realBottomPct, 0);
+                const visualTop = Math.min(realTopPct, 100);
+                const visualHeight = visualTop - visualBottom;
+
+                // Only show text if we have enough visible space (e.g. > 3%)
+                if (visualHeight > 3) {
+                    const labelCenter = visualBottom + (visualHeight / 2);
                     
-                    block.innerHTML = `
+                    const label = document.createElement('div');
+                    label.className = 'data-label';
+                    label.style.bottom = `${labelCenter}%`; // Centered on visible portion
+                    label.innerHTML = `
                         <span>${Math.round(p.speed)}</span>
                         <span class="wind-arrow" style="transform: rotate(${p.dir}deg)">↓</span>
                     `;
+                    container.appendChild(label);
                 }
-                
-                block.title = `Alt: ${Math.round(p.alt)}ft | Speed: ${p.speed}mph | Dir: ${p.dir}°`;
-                mask.appendChild(block);
             }
 
-            // 7. Axis Labels
-            // A. Ground
+            // --- AXIS LABELS ---
             const groundTick = document.createElement('div');
             groundTick.className = 'alt-tick ground-tick';
             groundTick.style.bottom = `0%`;
@@ -269,7 +278,6 @@
             groundGrid.style.bottom = `0%`;
             container.appendChild(groundGrid);
 
-            // B. Intervals
             const start1k = Math.ceil(surfaceElevation / 1000) * 1000;
             for (let alt = start1k; alt <= chartTop; alt += 1000) {
                 const pct = getPct(alt);
