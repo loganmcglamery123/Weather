@@ -332,11 +332,12 @@
             const label = document.createElement('div');
             label.className = 'data-label';
             label.style.bottom = `${center}%`;
-            const toDir = (p.dir + 180) % 360; // "from" -> "to" (direction wind is blowing)
+            const toDirMet = (p.dir + 180) % 360;          // 0=N,90=E,180=S,270=W
+            const rotDeg   = (toDirMet + 270) % 360;       // convert to CSS for ➤ (0=E)
             label.innerHTML =
               `${Math.round(p.speed)} ` +
-              `<span class="wind-arrow" style="transform:rotate(${toDir}deg)">➤</span>`;
-            container.appendChild(label);
+              `<span class="wind-arrow" style="transform:rotate(${rotDeg}deg)">➤</span>`;
+
           }
         });
 
